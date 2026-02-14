@@ -1,17 +1,10 @@
 import os
-import re
+import json
 from pathlib import Path
-
 from google_auth_oauthlib.flow import Flow
 from google.oauth2.credentials import Credentials
 
-# ✅ Scopes: Calendar + Login (email/profile)
-SCOPES = [
-    "https://www.googleapis.com/auth/calendar.events",
-    "openid",
-    "https://www.googleapis.com/auth/userinfo.email",
-    "https://www.googleapis.com/auth/userinfo.profile",
-]
+SCOPES = ["https://www.googleapis.com/auth/calendar.events"]
 
 APP_DIR = Path(__file__).resolve().parent.parent
 CREDS_DIR = APP_DIR / "credentials"
@@ -19,26 +12,41 @@ TOKENS_DIR = CREDS_DIR / "tokens"
 CLIENT_SECRET_PATH = CREDS_DIR / "client_secret.json"
 
 
+def _ensure_client_secret_file() -> None:
+    """
+    En deploy (Render), no subimos client_secret.json al repo.
+    Lo creamos desde la env GOOGLE_CLIENT_SECRET_JSON.
+    """
+    if CLIENT_SECRET_PATH.exists():
+        return
+
+    raw = os.getenv("GOOGLE_CLIENT_SECRET_JSON", "").strip()
+    if not raw:
+        raise RuntimeError(
+            "Falta GOOGLE_CLIENT_SECRET_JSON (Render env) y no existe credentials/client_secret.json"
+        )
+
+    CREDS_DIR.mkdir(parents=True, exist_ok=True)
+
+    # Acepta JSON puro o JSON escapado
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        # por si lo pegaste escapado tipo "\"{...}\""
+        data = json.loads(raw.encode("utf-8").decode("unicode_escape"))
+
+    CLIENT_SECRET_PATH.write_text(
+        json.dumps(data, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+
+
 def _base_url() -> str:
-    # ej: http://localhost:8000
     return os.environ.get("BASE_URL", "http://localhost:8000").rstrip("/")
 
 
-def sanitize_email(email: str) -> str:
-    # file-safe: juan.perez@gmail.com -> juan_perez_gmail_com
-    return re.sub(r"[^a-zA-Z0-9]+", "_", email).strip("_").lower()
-
-
-def token_path_for_email(email: str) -> Path:
-    TOKENS_DIR.mkdir(parents=True, exist_ok=True)
-    return TOKENS_DIR / f"{sanitize_email(email)}.json"
-
-
 def get_auth_url(vendor_id: str) -> str:
-    """
-    Devuelve la URL de Google para consentir.
-    state = vendor_id (en modo login usamos 'login' como placeholder)
-    """
+    _ensure_client_secret_file()
     redirect_uri = f"{_base_url()}/auth/callback"
 
     flow = Flow.from_client_secrets_file(
@@ -46,8 +54,7 @@ def get_auth_url(vendor_id: str) -> str:
         scopes=SCOPES,
         redirect_uri=redirect_uri,
     )
-
-    auth_url, _state = flow.authorization_url(
+    auth_url, _ = flow.authorization_url(
         access_type="offline",
         include_granted_scopes="true",
         prompt="consent",
@@ -57,11 +64,7 @@ def get_auth_url(vendor_id: str) -> str:
 
 
 def exchange_code_for_creds(code: str, vendor_id: str) -> Credentials:
-    """
-    Intercambia el 'code' por credenciales.
-    Ya NO guardamos por vendor_id acá, porque el id real es el email.
-    El guardado por email lo hace main.py (cuando ya conoce el email).
-    """
+    _ensure_client_secret_file()
     redirect_uri = f"{_base_url()}/auth/callback"
 
     flow = Flow.from_client_secrets_file(
@@ -69,16 +72,37 @@ def exchange_code_for_creds(code: str, vendor_id: str) -> Credentials:
         scopes=SCOPES,
         redirect_uri=redirect_uri,
     )
-
     flow.fetch_token(code=code)
-    return flow.credentials
+
+    creds = flow.credentials
+    save_creds_for_vendor(vendor_id, creds)
+    return creds
 
 
-def load_creds_for_email(email: str) -> Credentials | None:
-    """
-    Carga credenciales guardadas por email.
-    """
-    path = token_path_for_email(email)
+def _token_path(vendor_id: str) -> Path:
+    return TOKENS_DIR / f"{vendor_id}.json"
+
+
+def save_creds_for_vendor(vendor_id: str, creds: Credentials) -> None:
+    TOKENS_DIR.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "token": creds.token,
+        "refresh_token": creds.refresh_token,
+        "token_uri": creds.token_uri,
+        "client_id": creds.client_id,
+        "client_secret": creds.client_secret,
+        "scopes": creds.scopes,
+    }
+    _token_path(vendor_id).write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+
+
+def load_creds_for_vendor(vendor_id: str) -> Credentials | None:
+    path = _token_path(vendor_id)
     if not path.exists():
         return None
-    return Credentials.from_authorized_user_file(str(path), SCOPES)
+    data = json.loads(path.read_text(encoding="utf-8"))
+    return Credentials(**data)
+
