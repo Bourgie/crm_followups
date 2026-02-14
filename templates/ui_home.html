@@ -1,0 +1,141 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Pizarro • Seguimiento</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">
+        <img src="/static/pizarro-logo.png" alt="Pizarro">
+        <div class="title">Seguimiento</div>
+      </div>
+
+      <div class="subtle" style="display:flex; gap:12px; align-items:center;">
+        <span title="{{ vendor_email }}">{{ vendor_email }}</span>
+        <a href="/logout" style="color: rgba(255,255,255,.85); font-weight:800;">Salir</a>
+      </div>
+    </div>
+  </header>
+
+  <main class="container">
+
+    {% if msg %}
+      <div class="notice {{ msg_type }}">{{ msg }}</div>
+    {% endif %}
+
+    <div class="card">
+      <div class="actions" style="margin-top:10px;">
+      <a class="btn btn-primary" href="/ui/postventa/new">+ Nueva postventa</a>
+      </div>
+
+      <h1>Subir cotización (PDF)</h1>
+      <small>Al subir se crean recordatorios a 48h y 72h en tu Google Calendar (si no está duplicada).</small>
+
+      <div style="margin-top:12px;">
+        {% if is_connected %}
+          <span class="badge">Calendar conectado ✅</span>
+        {% else %}
+          <div class="notice error" style="margin-top:10px;">
+            No estás conectado a Google Calendar.
+            <a href="/login">Reconectar Google</a>
+          </div>
+        {% endif %}
+      </div>
+
+      <form action="/ui/upload" method="post" enctype="multipart/form-data" style="margin-top:14px;">
+        <label>PDF</label>
+        <input type="file" name="pdf" accept="application/pdf" required>
+
+        <div class="actions">
+          <button class="btn btn-primary" type="submit">Subir y crear recordatorios</button>
+          <a class="btn btn-secondary" href="/ui">Refrescar</a>
+        </div>
+      </form>
+    </div>
+
+    <div class="card">
+      <h2>Cotizaciones</h2>
+    
+      <div class="table-wrap"></div>  
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Número</th>
+              <th>Estado</th>
+              <th>Resumen</th>
+              <th>Fecha</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for q in quotes %}
+            <tr>
+              <td><b>{{ q.quote_number }}</b></td>
+              <td><span class="badge status-{{ q.status or 'pendiente' }}">{{ q.status or 'pendiente' }}</span>
+
+              <td>{{ q.summary or '' }}</td>
+              <td><small>{{ q.created_at }}</small></td>
+              <td>
+                <a href="/ui/quote?quote_number={{ q.quote_number }}">Abrir</a>
+              </td>
+            </tr>
+            {% endfor %}
+
+            {% if quotes|length == 0 %}
+            <tr>
+              <td colspan="5"><small>No hay cotizaciones todavía.</small></td>
+            </tr>
+            {% endif %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="card">
+  <h2>Postventas (sin cotización)</h2>
+
+  <div class="actions" style="margin-bottom:10px;">
+    <a class="btn btn-primary" href="/ui/postventa/new">+ Nueva postventa</a>
+  </div>
+
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Cliente</th>
+          <th>Fecha</th>
+          <th>Tipo</th>
+          <th>Estado</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for p in postventas %}
+        <tr>
+          <td><b>#{{ p.id }}</b></td>
+          <td>{{ p.client_name }}</td>
+          <td><small>{{ p.postventa_date }}</small></td>
+          <td>{{ p.type or '' }}</td>
+          <td><span class="badge">{{ p.status or 'pendiente' }}</span></td>
+          <td><a href="/ui/postventa?postventa_id={{ p.id }}">Abrir</a></td>
+        </tr>
+        {% endfor %}
+
+        {% if postventas|length == 0 %}
+        <tr>
+          <td colspan="6"><small>No hay postventas todavía.</small></td>
+        </tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+
+  </main>
+</body>
+</html>

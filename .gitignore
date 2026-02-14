@@ -1,0 +1,25 @@
+# Python / virtualenv
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Secrets / OAuth / env
+.env
+static/.env
+credentials/
+app/credentials/
+
+# Database & uploads
+data.sqlite
+uploads/
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+
+# Logs
+*.log

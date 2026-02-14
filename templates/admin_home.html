@@ -1,0 +1,127 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Pizarro • Panel Encargado</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="brand">
+      <img src="/static/pizarro-logo.png" alt="Pizarro">
+      <div class="title">Panel Encargado</div>
+    </div>
+    <div class="subtle" style="display:flex; gap:12px; align-items:center;">
+      <span title="{{ admin_email }}">{{ admin_email }}</span>
+      <a href="/logout" style="color: rgba(255,255,255,.85); font-weight:800;">Salir</a>
+    </div>
+  </div>
+</header>
+
+<main class="container">
+
+  {# ✅ si el backend no manda filters, evitamos error #}
+  {% set filters = filters or {} %}
+
+  {% if msg %}
+    <div class="notice {{ msg_type }}">{{ msg }}</div>
+  {% endif %}
+
+  <div class="card">
+    <h1>Filtros</h1>
+
+    <form method="get" action="/admin" class="row" style="align-items:end;">
+      <div class="col">
+        <label>Vendedor</label>
+        <select name="vendor_id">
+          <option value="">(Todos)</option>
+          {% for v in vendors %}
+            <option value="{{ v }}" {{ 'selected' if v==(filters.get('vendor_id') or '') else '' }}>{{ v }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="col">
+        <label>Estado</label>
+        <select name="status">
+          <option value="">(Todos)</option>
+          {% for s in ['pendiente','contactado','interesado','cerrada','perdida','cancelada'] %}
+            <option value="{{ s }}" {{ 'selected' if s==(filters.get('status') or '') else '' }}>{{ s }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="col">
+        <label>Tipo</label>
+        <select name="kind">
+          {% set k = filters.get('kind') or 'all' %}
+          <option value="all" {{ 'selected' if k in ['all','',None] else '' }}>(Todo)</option>
+          <option value="quote" {{ 'selected' if k=='quote' else '' }}>Cotizaciones</option>
+          <option value="postventa" {{ 'selected' if k=='postventa' else '' }}>Postventas</option>
+        </select>
+      </div>
+
+      <div class="col">
+        <label>Desde</label>
+        <input type="text" name="date_from" placeholder="YYYY-MM-DD" value="{{ filters.get('date_from') or '' }}">
+      </div>
+
+      <div class="col">
+        <label>Hasta</label>
+        <input type="text" name="date_to" placeholder="YYYY-MM-DD" value="{{ filters.get('date_to') or '' }}">
+      </div>
+
+      <div class="actions" style="margin-top:10px;">
+        <button class="btn btn-primary" type="submit">Aplicar</button>
+        <a class="btn btn-secondary" href="/admin">Limpiar</a>
+      </div>
+    </form>
+  </div>
+
+  <div class="card">
+    <h2>Resultados</h2>
+    <small>Total: {{ items|length }}</small>
+
+    <div class="table-wrap" style="margin-top:10px;">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Fecha</th>
+            <th>Tipo</th>
+            <th>Vendedor</th>
+            <th>Cliente</th>
+            <th>Ref</th>
+            <th>Estado</th>
+            <th>Total</th>
+            <th>Resumen</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for it in items %}
+          <tr>
+            <td><small>{{ it.date }}</small></td>
+            <td>{{ it.kind }}</td>
+            <td><small>{{ it.vendor_id }}</small></td>
+            <td>{{ it.client_name }}</td>
+            <td><b>{{ it.ref }}</b></td>
+            <td><span class="badge">{{ it.status }}</span></td>
+            <td>{{ it.total }}</td>
+            <td>{{ it.summary }}</td>
+          </tr>
+          {% endfor %}
+
+          {% if items|length == 0 %}
+          <tr><td colspan="8"><small>No hay resultados con esos filtros.</small></td></tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+
+  </div>
+
+</main>
+</body>
+</html>
+

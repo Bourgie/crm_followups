@@ -1,0 +1,68 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Nueva postventa</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="brand">
+      <img src="/static/pizarro-logo.png" alt="Pizarro">
+      <div class="title">Seguimiento</div>
+    </div>
+    <div class="subtle" style="display:flex; gap:12px; align-items:center;">
+      <span title="{{ vendor_email }}">{{ vendor_email }}</span>
+      <a href="/logout" style="color: rgba(255,255,255,.85); font-weight:800;">Salir</a>
+    </div>
+  </div>
+</header>
+
+<main class="container">
+  {% if msg %}
+    <div class="notice {{ msg_type }}">{{ msg }}</div>
+  {% endif %}
+
+  <div class="actions" style="margin-top:10px;">
+    <a class="btn btn-secondary" href="/ui">← Volver</a>
+  </div>
+
+  <div class="card">
+    <h1>Nueva postventa (sin cotización)</h1>
+    <small>Crea un evento en tu Google Calendar para recordarte la postventa.</small>
+
+    <form action="/ui/postventa/create" method="post" style="margin-top:14px;">
+      <label>Cliente *</label>
+      <input type="text" name="client_name" required placeholder="Nombre del cliente">
+
+      <label>Teléfono (opcional)</label>
+      <input type="text" name="phone" placeholder="Ej: 381-xxxxxxx">
+
+      <label>Fecha venta/instalación (opcional)</label>
+      <input type="text" name="sale_date" placeholder="Ej: 2026-02-11">
+
+      <label>Fecha postventa *</label>
+      <input type="text" name="postventa_date" required value="{{ default_postventa_date }}" placeholder="YYYY-MM-DD">
+
+      <label>Tipo</label>
+      <select name="type">
+        <option value="postventa">postventa</option>
+        <option value="instalacion">instalacion</option>
+        <option value="entrega">entrega</option>
+        <option value="garantia">garantia</option>
+      </select>
+
+      <label>Notas</label>
+      <textarea name="notes" placeholder="Ej: Revisar funcionamiento, preguntar conformidad, ofrecer mantenimiento."></textarea>
+
+      <div class="actions">
+        <button class="btn btn-primary" type="submit">Crear postventa</button>
+      </div>
+    </form>
+  </div>
+</main>
+
+</body>
+</html>

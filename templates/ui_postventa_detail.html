@@ -1,0 +1,91 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Postventa #{{ pv.id }}</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="brand">
+      <img src="/static/pizarro-logo.png" alt="Pizarro">
+      <div class="title">Seguimiento</div>
+    </div>
+    <div class="subtle" style="display:flex; gap:12px; align-items:center;">
+      <span title="{{ vendor_email }}">{{ vendor_email }}</span>
+      <a href="/logout" style="color: rgba(255,255,255,.85); font-weight:800;">Salir</a>
+    </div>
+  </div>
+</header>
+
+<main class="container">
+
+  {% if msg %}
+    <div class="notice {{ msg_type }}">{{ msg }}</div>
+  {% endif %}
+
+  <div class="actions" style="margin-top:10px;">
+    <a class="btn btn-secondary" href="/ui">← Volver</a>
+  </div>
+
+  <div class="card">
+    <h1>Postventa #{{ pv.id }}</h1>
+    <small>Creada: {{ pv.created_at }}</small>
+
+    <div class="row" style="margin-top:12px;">
+      <div class="col">
+        <div class="card" style="box-shadow:none;">
+          <div><b>Cliente:</b> {{ pv.client_name }}</div>
+          <div><b>Tel:</b> {{ pv.phone or '-' }}</div>
+          <div><b>Tipo:</b> {{ pv.type or '-' }}</div>
+          <div><b>Venta/instalación:</b> {{ pv.sale_date or '-' }}</div>
+          <div><b>Fecha postventa:</b> {{ pv.postventa_date }}</div>
+        </div>
+      </div>
+      <div class="col">
+        <div class="card" style="box-shadow:none;">
+          <div><b>Estado:</b> <span class="badge">{{ pv.status or 'pendiente' }}</span></div>
+          {% if pv.htmlLink %}
+            <div style="margin-top:10px;">
+              <a class="btn btn-secondary" href="{{ pv.htmlLink }}" target="_blank" rel="noopener">Ver evento</a>
+            </div>
+          {% else %}
+            <div style="margin-top:10px;"><small>Sin evento asociado.</small></div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    {% if pv.notes %}
+      <div style="margin-top:12px;">
+        <b>Notas</b>
+        <div class="card" style="box-shadow:none; margin-top:8px;">
+          {{ pv.notes }}
+        </div>
+      </div>
+    {% endif %}
+  </div>
+
+  <div class="card">
+    <h2>Acciones</h2>
+
+    <form action="/ui/postventa/done" method="post">
+      <input type="hidden" name="postventa_id" value="{{ pv.id }}">
+      <button class="btn btn-primary" type="submit">Marcar como realizada</button>
+    </form>
+
+    <form action="/ui/postventa/cancel" method="post" style="margin-top:12px;">
+      <input type="hidden" name="postventa_id" value="{{ pv.id }}">
+      <button class="btn btn-danger" type="submit"
+        onclick="return confirm('¿Cancelar la postventa y borrar el evento del calendario?');">
+        Cancelar postventa (borrar evento)
+      </button>
+    </form>
+
+  </div>
+
+</main>
+</body>
+</html>

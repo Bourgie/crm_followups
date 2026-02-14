@@ -1,0 +1,144 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Cotización {{ detail.quote_number }}</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="brand">
+      <img src="/static/pizarro-logo.png" alt="Pizarro">
+      <div class="title">Seguimiento</div>
+    </div>
+
+    <div class="subtle" style="display:flex; gap:12px; align-items:center;">
+      <span title="{{ vendor_email }}">{{ vendor_email }}</span>
+      <a href="/logout" style="color: rgba(255,255,255,.85); font-weight:800;">Salir</a>
+    </div>
+  </div>
+</header>
+
+<main class="container">
+
+  {% if msg %}
+    <div class="notice {{ msg_type }}">{{ msg }}</div>
+  {% endif %}
+
+  <div class="actions" style="margin-top:10px;">
+    <a class="btn btn-secondary" href="/ui">← Volver</a>
+  </div>
+
+  <!-- ================= DATOS DE LA COTIZACIÓN ================= -->
+  <div class="card">
+    <h1>Cotización {{ detail.quote_number }}</h1>
+    <small>Datos extraídos del PDF</small>
+
+    <div class="row" style="margin-top:12px;">
+      <div class="col">
+        <div class="card" style="box-shadow:none;">
+          <div><b>Cliente:</b> {{ detail.extracted.client_name if detail.extracted else '' }}</div>
+          <div><b>Total:</b> {{ detail.extracted.total if detail.extracted else '' }}</div>
+          <div><b>Vendedor:</b> {{ detail.extracted.seller if detail.extracted else '' }}</div>
+          <div><b>Fecha emisión:</b> {{ detail.extracted.issue_date if detail.extracted else '' }}</div>
+        </div>
+      </div>
+
+      <div class="col">
+        <div class="card" style="box-shadow:none;">
+          <div>
+            <b>Estado actual:</b>
+            <span class="badge status-{{ detail.status or 'pendiente' }}">
+              {{ detail.status or 'pendiente' }}
+            </span>
+          </div>
+          <div style="margin-top:8px;"><small>Creada: {{ detail.created_at }}</small></div>
+          <div><small>Actualizada: {{ detail.updated_at or '-' }}</small></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= RECORDATORIOS ================= -->
+  {% if detail.events_created %}
+  <div class="card">
+    <h2>Recordatorios</h2>
+    <small>Accesos directos a Google Calendar.</small>
+
+    <div class="actions" style="margin-top:10px;">
+      {% for ev in detail.events_created %}
+        {% if ev.htmlLink %}
+          <a class="btn btn-secondary"
+             href="{{ ev.htmlLink }}"
+             target="_blank"
+             rel="noopener">
+            Ver {{ ev.tag or 'evento' }}
+          </a>
+        {% endif %}
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- ================= RESUMEN / EDICIÓN ================= -->
+  <div class="card">
+    <h2>Resumen y observaciones</h2>
+
+    <!-- FORM GUARDAR -->
+    <form action="/ui/quote/save" method="post">
+      <input type="hidden" name="quote_number" value="{{ detail.quote_number }}">
+
+      <label>Estado</label>
+      {% set s = detail.status or 'pendiente' %}
+      <select name="status">
+        <option value="pendiente" {{ 'selected' if s=='pendiente' else '' }}>pendiente</option>
+        <option value="contactado" {{ 'selected' if s=='contactado' else '' }}>contactado</option>
+        <option value="interesado" {{ 'selected' if s=='interesado' else '' }}>interesado</option>
+        <option value="cerrada" {{ 'selected' if s=='cerrada' else '' }}>cerrada</option>
+        <option value="perdida" {{ 'selected' if s=='perdida' else '' }}>perdida</option>
+      </select>
+
+      <label>Resumen</label>
+      <input
+        type="text"
+        name="summary"
+        value="{{ detail.summary or '' }}"
+        placeholder="Ej: Cliente quiere instalación la semana próxima"
+      >
+
+      <label>Observaciones</label>
+      <textarea name="notes"
+        placeholder="Ej: Llamé, no atendió. Reintentar mañana.">{{ detail.notes or '' }}</textarea>
+
+      <div class="actions">
+        <button class="btn btn-primary" type="submit">Guardar</button>
+      </div>
+    </form>
+
+    <!-- BOTÓN POSTVENTA (SOLO SI CERRADA) -->
+    {% set st = (detail.status or 'pendiente')|lower %}
+    {% if st == 'cerrada' %}
+      <form action="/ui/quote/postventa" method="post" style="margin-top:14px;">
+        <input type="hidden" name="quote_number" value="{{ detail.quote_number }}">
+        <button class="btn btn-primary" type="submit">
+          Crear postventa +7 días
+        </button>
+      </form>
+    {% endif %}
+
+    <!-- CANCELAR RECORDATORIOS -->
+    <form action="/ui/quote/cancel" method="post" style="margin-top:14px;">
+      <input type="hidden" name="quote_number" value="{{ detail.quote_number }}">
+      <button class="btn btn-danger" type="submit"
+        onclick="return confirm('¿Cancelar los recordatorios de 48h y 72h?');">
+        Cancelar recordatorios
+      </button>
+    </form>
+
+  </div>
+
+</main>
+</body>
+</html>
