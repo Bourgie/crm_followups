@@ -1,11 +1,15 @@
+# app/google_oauth.py
 import os
 import json
+import re
 from pathlib import Path
 from datetime import datetime, timezone
 
 from google_auth_oauthlib.flow import Flow
 from google.oauth2.credentials import Credentials
 
+# OJO: usás /userinfo para obtener el email => necesitás estos scopes.
+# (Evita el warning de "Scope has changed" y problemas raros de refresh.)
 SCOPES = [
     "openid",
     "https://www.googleapis.com/auth/userinfo.email",
@@ -19,15 +23,18 @@ TOKENS_DIR = CREDS_DIR / "tokens"
 CLIENT_SECRET_PATH = CREDS_DIR / "client_secret.json"
 
 
+# -----------------------------
+# Client secret (local file o env en Render)
+# -----------------------------
 def _ensure_client_secret_file() -> None:
     """
-    En deploy (Render), no subimos client_secret.json al repo.
-    Lo creamos desde la env GOOGLE_CLIENT_SECRET_JSON.
+    En local podés tener credentials/client_secret.json.
+    En Render NO lo subimos al repo: lo armamos desde GOOGLE_CLIENT_SECRET_JSON.
     """
     if CLIENT_SECRET_PATH.exists():
         return
 
-    raw = os.getenv("GOOGLE_CLIENT_SECRET_JSON", "").strip()
+    raw = (os.getenv("GOOGLE_CLIENT_SECRET_JSON") or "").strip()
     if not raw:
         raise RuntimeError(
             "Falta GOOGLE_CLIENT_SECRET_JSON (env) y no existe credentials/client_secret.json"
@@ -35,10 +42,10 @@ def _ensure_client_secret_file() -> None:
 
     CREDS_DIR.mkdir(parents=True, exist_ok=True)
 
+    # Acepta JSON puro o JSON "escapado"
     try:
         data = json.loads(raw)
     except json.JSONDecodeError:
-        # por si lo pegaste escapado
         data = json.loads(raw.encode("utf-8").decode("unicode_escape"))
 
     CLIENT_SECRET_PATH.write_text(
@@ -48,37 +55,82 @@ def _ensure_client_secret_file() -> None:
 
 
 def _base_url() -> str:
+    # ej: http://localhost:8000 o https://crm-followups.onrender.com
     return os.environ.get("BASE_URL", "http://localhost:8000").rstrip("/")
 
 
-def _safe_key(s: str) -> str:
+# -----------------------------
+# Expiry helpers (FIX: naive vs aware)
+# -----------------------------
+def _serialize_expiry(dt: datetime | None) -> str | None:
+    """Guardamos expiry como ISO UTC con Z (string)."""
+    if not dt:
+        return None
+    if dt.tzinfo is None:
+        # si vino naive, asumimos UTC
+        dt_utc = dt.replace(tzinfo=timezone.utc)
+    else:
+        dt_utc = dt.astimezone(timezone.utc)
+    return dt_utc.isoformat().replace("+00:00", "Z")
+
+
+def _parse_expiry(value):
     """
-    Para nombre de archivo (email/vendor_id), evita caracteres raros.
+    Devuelve expiry como datetime NAIVE en UTC (sin tzinfo).
+    Evita error: naive vs aware en google-auth.
     """
-    out = []
-    for ch in (s or "").strip():
-        if ch.isalnum():
-            out.append(ch)
-        else:
-            out.append("_")
-    return "".join(out) or "unknown"
+    if not value:
+        return None
+
+    if isinstance(value, datetime):
+        dt = value
+    elif isinstance(value, str):
+        v = value.strip()
+        try:
+            if v.endswith("Z"):
+                dt = datetime.fromisoformat(v.replace("Z", "+00:00"))
+            else:
+                dt = datetime.fromisoformat(v)
+        except Exception:
+            return None
+    else:
+        return None
+
+    # Normalizamos a UTC y lo dejamos NAIVE
+    if dt.tzinfo is None:
+        # si vino naive, asumimos UTC
+        dt_utc_naive = dt
+    else:
+        dt_utc_naive = dt.astimezone(timezone.utc).replace(tzinfo=None)
+
+    return dt_utc_naive
 
 
 # -----------------------------
-# Token paths (por email / vendor)
+# Token paths (vendor + email)
 # -----------------------------
+def _safe_filename(s: str) -> str:
+    s = s.strip().lower()
+    s = re.sub(r"[^a-z0-9._-]+", "_", s)
+    return s
+
+
+def _token_path(vendor_id: str) -> Path:
+    return TOKENS_DIR / f"{_safe_filename(vendor_id)}.json"
+
+
 def token_path_for_email(email: str) -> Path:
-    return TOKENS_DIR / f"{_safe_key(email)}.json"
-
-
-def token_path_for_vendor(vendor_id: str) -> Path:
-    return TOKENS_DIR / f"{_safe_key(vendor_id)}.json"
+    return TOKENS_DIR / f"{_safe_filename(email)}.json"
 
 
 # -----------------------------
-# OAuth flow
+# OAuth URLs / exchange
 # -----------------------------
 def get_auth_url(vendor_id: str) -> str:
+    """
+    Devuelve URL de consentimiento.
+    state = vendor_id (para tokens por vendedor o login).
+    """
     _ensure_client_secret_file()
     redirect_uri = f"{_base_url()}/auth/callback"
 
@@ -98,6 +150,9 @@ def get_auth_url(vendor_id: str) -> str:
 
 
 def exchange_code_for_creds(code: str, vendor_id: str) -> Credentials:
+    """
+    Intercambia el code por credenciales y guarda token por vendor_id.
+    """
     _ensure_client_secret_file()
     redirect_uri = f"{_base_url()}/auth/callback"
 
@@ -109,74 +164,76 @@ def exchange_code_for_creds(code: str, vendor_id: str) -> Credentials:
     flow.fetch_token(code=code)
 
     creds = flow.credentials
-
-    # Guardamos por vendor_id (si lo estás usando) y listo
     save_creds_for_vendor(vendor_id, creds)
     return creds
 
 
 # -----------------------------
-# Save / Load
+# Save / Load creds (vendor)
 # -----------------------------
-def _parse_expiry(value):
-    """
-    Convierte expiry string -> datetime aware.
-    Acepta ISO con Z o con offset.
-    """
-    if not value or not isinstance(value, str):
-        return value
-    v = value.strip()
-    try:
-        # Ej: 2026-02-14T12:34:56Z
-        if v.endswith("Z"):
-            return datetime.fromisoformat(v.replace("Z", "+00:00"))
-        # Ej: 2026-02-14T12:34:56+00:00
-        dt = datetime.fromisoformat(v)
-        # si vino naive, lo asumimos UTC
-        if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
-        return dt
-    except Exception:
-        return None
-
-
 def save_creds_for_vendor(vendor_id: str, creds: Credentials) -> None:
     TOKENS_DIR.mkdir(parents=True, exist_ok=True)
-    token_path_for_vendor(vendor_id).write_text(creds.to_json(), encoding="utf-8")
+
+    payload = {
+        "token": creds.token,
+        "refresh_token": creds.refresh_token,
+        "token_uri": creds.token_uri,
+        "client_id": creds.client_id,
+        "client_secret": creds.client_secret,
+        "scopes": creds.scopes or SCOPES,
+        "expiry": _serialize_expiry(getattr(creds, "expiry", None)),
+    }
+    _token_path(vendor_id).write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
 
 
 def load_creds_for_vendor(vendor_id: str) -> Credentials | None:
-    path = token_path_for_vendor(vendor_id)
+    path = _token_path(vendor_id)
     if not path.exists():
         return None
+
     data = json.loads(path.read_text(encoding="utf-8"))
+    if "expiry" in data:
+        data["expiry"] = _parse_expiry(data.get("expiry"))
 
-    # ✅ FIX: expiry viene como str en muchos casos
-    if isinstance(data.get("expiry"), str):
-        data["expiry"] = _parse_expiry(data["expiry"])
-
-    # Constructor correcto que tolera campos extra
+    # from_authorized_user_info es más tolerante
     try:
         return Credentials.from_authorized_user_info(data, scopes=SCOPES)
     except Exception:
-        # fallback
         return Credentials(**data)
 
 
+# -----------------------------
+# Save / Load creds (email) - usado por main.py
+# -----------------------------
 def save_creds_for_email(email: str, creds: Credentials) -> None:
     TOKENS_DIR.mkdir(parents=True, exist_ok=True)
-    token_path_for_email(email).write_text(creds.to_json(), encoding="utf-8")
+
+    payload = {
+        "token": creds.token,
+        "refresh_token": creds.refresh_token,
+        "token_uri": creds.token_uri,
+        "client_id": creds.client_id,
+        "client_secret": creds.client_secret,
+        "scopes": creds.scopes or SCOPES,
+        "expiry": _serialize_expiry(getattr(creds, "expiry", None)),
+    }
+    token_path_for_email(email).write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
 
 
 def load_creds_for_email(email: str) -> Credentials | None:
     path = token_path_for_email(email)
     if not path.exists():
         return None
-    data = json.loads(path.read_text(encoding="utf-8"))
 
-    # ✅ FIX: expiry str -> datetime
-    if isinstance(data.get("expiry"), str):
-        data["expiry"] = _parse_expiry(data["expiry"])
+    data = json.loads(path.read_text(encoding="utf-8"))
+    if "expiry" in data:
+        data["expiry"] = _parse_expiry(data.get("expiry"))
 
     try:
         return Credentials.from_authorized_user_info(data, scopes=SCOPES)
