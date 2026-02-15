@@ -124,3 +124,17 @@ def load_creds_for_vendor(vendor_id: str) -> Credentials | None:
         return None
     data = json.loads(path.read_text(encoding="utf-8"))
     return Credentials(**data)
+
+def token_path_for_email(email: str) -> Path:
+    """
+    Compatibilidad con main.py (alias).
+    Antes se guardaba por email. Ahora usamos vendor_id.
+    """
+    return _token_path(email)
+
+
+def load_creds_for_email(email: str) -> Credentials | None:
+    """
+    Compatibilidad con main.py (alias).
+    """
+    return load_creds_for_vendor(email)
