@@ -1,5 +1,5 @@
 <!doctype html>
-<html>
+<html lang="es">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -18,10 +18,9 @@
 
       <div class="subtle" style="display:flex; gap:12px; align-items:center;">
         <span title="{{ vendor_email }}">{{ vendor_email }}</span>
+
         {% if is_admin %}
-          <a href="/admin" style="color: rgba(255,255,255,.95); font-weight:800;">
-          Panel Admin
-          </a>
+          <a href="/admin" style="color: rgba(255,255,255,.95); font-weight:800;">Panel Admin</a>
         {% endif %}
 
         <a href="/logout" style="color: rgba(255,255,255,.85); font-weight:800;">Salir</a>
@@ -35,9 +34,10 @@
       <div class="notice {{ msg_type }}">{{ msg }}</div>
     {% endif %}
 
+    <!-- SUBIR COTIZACION -->
     <div class="card">
       <div class="actions" style="margin-top:10px;">
-      <a class="btn btn-primary" href="/ui/postventa/new">+ Nueva postventa</a>
+        <a class="btn btn-primary" href="/ui/postventa/new">+ Nueva postventa</a>
       </div>
 
       <h1>Subir cotización (PDF)</h1>
@@ -65,10 +65,11 @@
       </form>
     </div>
 
+    <!-- COTIZACIONES -->
     <div class="card">
       <h2>Cotizaciones</h2>
-    
-      <div class="table-wrap"></div>  
+
+      <div class="table-wrap">
         <table class="table">
           <thead>
             <tr>
@@ -82,12 +83,25 @@
           <tbody>
             {% for q in quotes %}
             <tr>
-              <td><b>{{ q.quote_number }}</b></td>
-              <td><span class="badge status-{{ q.status or 'pendiente' }}">{{ q.status or 'pendiente' }}</span>
+              <td data-label="Número">
+                <b>{{ q.quote_number }}</b>
+              </td>
 
-              <td>{{ q.summary or '' }}</td>
-              <td><small>{{ q.created_at }}</small></td>
-              <td>
+              <td data-label="Estado">
+                <span class="badge status-{{ q.status or 'pendiente' }}">
+                  {{ q.status or 'pendiente' }}
+                </span>
+              </td>
+
+              <td data-label="Resumen">
+                {{ q.summary or '' }}
+              </td>
+
+              <td data-label="Fecha">
+                <small>{{ q.created_at }}</small>
+              </td>
+
+              <td data-label="Acción">
                 <a href="/ui/quote?quote_number={{ q.quote_number }}">Abrir</a>
               </td>
             </tr>
@@ -102,47 +116,48 @@
         </table>
       </div>
     </div>
+
+    <!-- POSTVENTAS SIN COTIZACION -->
     <div class="card">
-  <h2>Postventas (sin cotización)</h2>
+      <h2>Postventas (sin cotización)</h2>
 
-  <div class="actions" style="margin-bottom:10px;">
-    <a class="btn btn-primary" href="/ui/postventa/new">+ Nueva postventa</a>
-  </div>
+      <div class="actions" style="margin-bottom:10px;">
+        <a class="btn btn-primary" href="/ui/postventa/new">+ Nueva postventa</a>
+      </div>
 
-  <div class="table-wrap">
-    <table class="table">
-      <thead>
-        <tr>
-          <th>ID</th>
-          <th>Cliente</th>
-          <th>Fecha</th>
-          <th>Tipo</th>
-          <th>Estado</th>
-          <th></th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for p in postventas %}
-        <tr>
-          <td><b>#{{ p.id }}</b></td>
-          <td>{{ p.client_name }}</td>
-          <td><small>{{ p.postventa_date }}</small></td>
-          <td>{{ p.type or '' }}</td>
-          <td><span class="badge">{{ p.status or 'pendiente' }}</span></td>
-          <td><a href="/ui/postventa?postventa_id={{ p.id }}">Abrir</a></td>
-        </tr>
-        {% endfor %}
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Cliente</th>
+              <th>Fecha</th>
+              <th>Tipo</th>
+              <th>Estado</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for p in postventas %}
+            <tr>
+              <td data-label="ID"><b>#{{ p.id }}</b></td>
+              <td data-label="Cliente">{{ p.client_name }}</td>
+              <td data-label="Fecha"><small>{{ p.postventa_date }}</small></td>
+              <td data-label="Tipo">{{ p.type or '' }}</td>
+              <td data-label="Estado"><span class="badge">{{ p.status or 'pendiente' }}</span></td>
+              <td data-label="Acción"><a href="/ui/postventa?postventa_id={{ p.id }}">Abrir</a></td>
+            </tr>
+            {% endfor %}
 
-        {% if postventas|length == 0 %}
-        <tr>
-          <td colspan="6"><small>No hay postventas todavía.</small></td>
-        </tr>
-        {% endif %}
-      </tbody>
-    </table>
-  </div>
-</div>
-
+            {% if postventas|length == 0 %}
+            <tr>
+              <td colspan="6"><small>No hay postventas todavía.</small></td>
+            </tr>
+            {% endif %}
+          </tbody>
+        </table>
+      </div>
+    </div>
 
   </main>
 </body>
