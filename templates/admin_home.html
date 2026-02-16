@@ -2,6 +2,8 @@
 <html lang="es">
 <head>
   <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
   <title>Pizarro • Panel Encargado</title>
   <link rel="stylesheet" href="/static/styles.css">
 </head>
@@ -106,16 +108,19 @@
     <div class="table-wrap" style="margin-top:10px;">
       <table class="table">
         <thead>
+          {% for it in items %}
           <tr>
-            <th>Fecha</th>
-            <th>Tipo</th>
-            <th>Vendedor</th>
-            <th>Cliente</th>
-            <th>Ref</th>
-            <th>Estado</th>
-            <th>Total</th>
-            <th>Resumen</th>
+            <td data-label="Fecha"><small>{{ it.date }}</small></td>
+            <td data-label="Tipo">{{ it.kind }}</td>
+            <td data-label="Vendedor"><small>{{ it.vendor_id }}</small></td>
+            <td data-label="Cliente">{{ it.client_name }}</td>
+            <td data-label="Ref"><b>{{ it.ref }}</b></td>
+            <td data-label="Estado"><span class="badge">{{ it.status }}</span></td>
+            <td data-label="Total">{{ it.total }}</td>
+            <td data-label="Resumen">{{ it.summary }}</td>
           </tr>
+          {% endfor %}
+
         </thead>
         <tbody>
           {% for it in items %}
