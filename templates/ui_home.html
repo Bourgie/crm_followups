@@ -3,162 +3,202 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-
   <title>Pizarro • Seguimiento</title>
   <link rel="stylesheet" href="/static/styles.css">
 </head>
 <body>
 
-  <header class="topbar">
-    <div class="topbar-inner">
-      <div class="brand">
-        <img src="/static/pizarro-logo.png" alt="Pizarro">
-        <div class="title">Seguimiento</div>
-      </div>
-
-      <div class="subtle" style="display:flex; gap:12px; align-items:center;">
-        <span title="{{ vendor_email }}">{{ vendor_email }}</span>
-
-        {% if is_admin %}
-          <a href="/admin" style="color: rgba(255,255,255,.95); font-weight:800;">Panel Admin</a>
-        {% endif %}
-
-        <a href="/logout" style="color: rgba(255,255,255,.85); font-weight:800;">Salir</a>
-      </div>
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="brand">
+      <img src="/static/pizarro-logo.png" alt="Pizarro">
+      <div class="title">Seguimiento</div>
     </div>
-  </header>
 
-  <main class="container">
+    <div class="subtle" style="display:flex; gap:12px; align-items:center;">
+      <span title="{{ vendor_email }}">{{ vendor_email }}</span>
 
-    {% if msg %}
-      <div class="notice {{ msg_type }}">{{ msg }}</div>
-    {% endif %}
+      {% if is_admin %}
+        <a href="/admin" style="color:rgba(255,255,255,.95); font-weight:800;">
+          Panel Admin
+        </a>
+      {% endif %}
 
-    <!-- SUBIR COTIZACION -->
-    <div class="card">
-      <div class="actions" style="margin-top:10px;">
-        <a class="btn btn-primary" href="/ui/postventa/new">+ Nueva postventa</a>
-      </div>
+      <a href="/logout" style="color:rgba(255,255,255,.85); font-weight:800;">
+        Salir
+      </a>
+    </div>
+  </div>
+</header>
 
-      <h1>Subir cotización (PDF)</h1>
-      <small>Al subir se crean recordatorios a 48h y 72h en tu Google Calendar (si no está duplicada).</small>
+<main class="container">
 
-      <div style="margin-top:12px;">
-        {% if is_connected %}
-          <span class="badge">Calendar conectado ✅</span>
-        {% else %}
-          <div class="notice error" style="margin-top:10px;">
-            No estás conectado a Google Calendar.
-            <a href="/login">Reconectar Google</a>
+  {% if msg %}
+    <div class="notice {{ msg_type }}">{{ msg }}</div>
+  {% endif %}
+
+  <!-- ================= KPIs ================= -->
+  {% if kpis %}
+  <div class="card">
+    <h2 style="margin-top:0;">KPIs</h2>
+
+    <div class="row" style="gap:12px; margin-top:10px; flex-wrap:wrap;">
+      <div class="col">
+        <div class="card" style="box-shadow:none;">
+          <b>Cotizaciones</b>
+          <div><small>Total:</small> {{ kpis.quotes.total }}</div>
+          <div><small>Pendientes:</small> {{ kpis.quotes.pendiente }}</div>
+          <div><small>Cerradas:</small> {{ kpis.quotes.cerrada }}</div>
+          <div><small>Perdidas:</small> {{ kpis.quotes.perdida }}</div>
+          <div style="margin-top:6px;">
+            <small>% cierre:</small>
+            <b>
+              {% if kpis.close_rate is not none %}
+                {{ kpis.close_rate }}%
+              {% else %}
+                -
+              {% endif %}
+            </b>
           </div>
-        {% endif %}
-      </div>
-
-      <form action="/ui/upload" method="post" enctype="multipart/form-data" style="margin-top:14px;">
-        <label>PDF</label>
-        <input type="file" name="pdf" accept="application/pdf" required>
-
-        <div class="actions">
-          <button class="btn btn-primary" type="submit">Subir y crear recordatorios</button>
-          <a class="btn btn-secondary" href="/ui">Refrescar</a>
         </div>
-      </form>
-    </div>
-
-    <!-- COTIZACIONES -->
-    <div class="card">
-      <h2>Cotizaciones</h2>
-
-      <div class="table-wrap">
-        <table class="table">
-          <thead>
-            <tr>
-              <th>Número</th>
-              <th>Estado</th>
-              <th>Resumen</th>
-              <th>Fecha</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for q in quotes %}
-            <tr>
-              <td data-label="Número">
-                <b>{{ q.quote_number }}</b>
-              </td>
-
-              <td data-label="Estado">
-                <span class="badge status-{{ q.status or 'pendiente' }}">
-                  {{ q.status or 'pendiente' }}
-                </span>
-              </td>
-
-              <td data-label="Resumen">
-                {{ q.summary or '' }}
-              </td>
-
-              <td data-label="Fecha">
-                <small>{{ q.created_at }}</small>
-              </td>
-
-              <td data-label="Acción">
-                <a href="/ui/quote?quote_number={{ q.quote_number }}">Abrir</a>
-              </td>
-            </tr>
-            {% endfor %}
-
-            {% if quotes|length == 0 %}
-            <tr>
-              <td colspan="5"><small>No hay cotizaciones todavía.</small></td>
-            </tr>
-            {% endif %}
-          </tbody>
-        </table>
-      </div>
-    </div>
-
-    <!-- POSTVENTAS SIN COTIZACION -->
-    <div class="card">
-      <h2>Postventas (sin cotización)</h2>
-
-      <div class="actions" style="margin-bottom:10px;">
-        <a class="btn btn-primary" href="/ui/postventa/new">+ Nueva postventa</a>
       </div>
 
-      <div class="table-wrap">
-        <table class="table">
-          <thead>
-            <tr>
-              <th>ID</th>
-              <th>Cliente</th>
-              <th>Fecha</th>
-              <th>Tipo</th>
-              <th>Estado</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for p in postventas %}
-            <tr>
-              <td data-label="ID"><b>#{{ p.id }}</b></td>
-              <td data-label="Cliente">{{ p.client_name }}</td>
-              <td data-label="Fecha"><small>{{ p.postventa_date }}</small></td>
-              <td data-label="Tipo">{{ p.type or '' }}</td>
-              <td data-label="Estado"><span class="badge">{{ p.status or 'pendiente' }}</span></td>
-              <td data-label="Acción"><a href="/ui/postventa?postventa_id={{ p.id }}">Abrir</a></td>
-            </tr>
-            {% endfor %}
-
-            {% if postventas|length == 0 %}
-            <tr>
-              <td colspan="6"><small>No hay postventas todavía.</small></td>
-            </tr>
-            {% endif %}
-          </tbody>
-        </table>
+      <div class="col">
+        <div class="card" style="box-shadow:none;">
+          <b>Postventas</b>
+          <div><small>Total:</small> {{ kpis.postventas.total }}</div>
+          <div><small>Pendientes:</small> {{ kpis.postventas.pendiente }}</div>
+          <div><small>Realizadas:</small> {{ kpis.postventas.realizada }}</div>
+          <div><small>Canceladas:</small> {{ kpis.postventas.cancelada }}</div>
+        </div>
       </div>
     </div>
+  </div>
+  {% endif %}
 
-  </main>
+  <!-- ================= SUBIR COTIZACIÓN ================= -->
+  <div class="card">
+    <div class="actions" style="margin-bottom:10px;">
+      <a class="btn btn-primary" href="/ui/postventa/new">+ Nueva postventa</a>
+    </div>
+
+    <h1>Subir cotización (PDF)</h1>
+    <small>
+      Se crean recordatorios a 48h y 72h en tu Google Calendar (si no está duplicada).
+    </small>
+
+    <div style="margin-top:12px;">
+      {% if is_connected %}
+        <span class="badge">Calendar conectado ✅</span>
+      {% else %}
+        <div class="notice error">
+          No estás conectado a Google Calendar.
+          <a href="/login">Reconectar Google</a>
+        </div>
+      {% endif %}
+    </div>
+
+    <form action="/ui/upload" method="post" enctype="multipart/form-data" style="margin-top:14px;">
+      <label>PDF</label>
+      <input type="file" name="pdf" accept="application/pdf" required>
+
+      <div class="actions">
+        <button class="btn btn-primary" type="submit">
+          Subir y crear recordatorios
+        </button>
+        <a class="btn btn-secondary" href="/ui">Refrescar</a>
+      </div>
+    </form>
+  </div>
+
+  <!-- ================= COTIZACIONES ================= -->
+  <div class="card">
+    <h2>Cotizaciones</h2>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Número</th>
+            <th>Estado</th>
+            <th>Resumen</th>
+            <th>Fecha</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for q in quotes %}
+          <tr>
+            <td data-label="Número"><b>{{ q.quote_number }}</b></td>
+            <td data-label="Estado">
+              <span class="badge status-{{ q.status or 'pendiente' }}">
+                {{ q.status or 'pendiente' }}
+              </span>
+            </td>
+            <td data-label="Resumen">{{ q.summary or '' }}</td>
+            <td data-label="Fecha"><small>{{ q.created_at }}</small></td>
+            <td data-label="Acción">
+              <a href="/ui/quote?quote_number={{ q.quote_number }}">Abrir</a>
+            </td>
+          </tr>
+          {% endfor %}
+
+          {% if quotes|length == 0 %}
+          <tr>
+            <td colspan="5"><small>No hay cotizaciones todavía.</small></td>
+          </tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ================= POSTVENTAS ================= -->
+  <div class="card">
+    <h2>Postventas (sin cotización)</h2>
+
+    <div class="actions" style="margin-bottom:10px;">
+      <a class="btn btn-primary" href="/ui/postventa/new">+ Nueva postventa</a>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Cliente</th>
+            <th>Fecha</th>
+            <th>Tipo</th>
+            <th>Estado</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for p in postventas %}
+          <tr>
+            <td data-label="ID"><b>#{{ p.id }}</b></td>
+            <td data-label="Cliente">{{ p.client_name }}</td>
+            <td data-label="Fecha"><small>{{ p.postventa_date }}</small></td>
+            <td data-label="Tipo">{{ p.type or '' }}</td>
+            <td data-label="Estado">
+              <span class="badge">{{ p.status or 'pendiente' }}</span>
+            </td>
+            <td data-label="Acción">
+              <a href="/ui/postventa?postventa_id={{ p.id }}">Abrir</a>
+            </td>
+          </tr>
+          {% endfor %}
+
+          {% if postventas|length == 0 %}
+          <tr>
+            <td colspan="6"><small>No hay postventas todavía.</small></td>
+          </tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</main>
 </body>
 </html>

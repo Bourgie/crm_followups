@@ -45,6 +45,8 @@ from .db import (
     # admin
     list_vendors,
     list_admin_items,
+    # KPIs
+    get_vendor_kpis,
 )
 
 load_dotenv()
@@ -160,19 +162,22 @@ def ui_home(request: Request, msg: str = "", msg_type: str = ""):
 
     is_connected = token_path_for_email(email).exists()
 
+    kpis = get_vendor_kpis(email)
+
     return templates.TemplateResponse(
         "ui_home.html",
         {
             "request": request,
             "vendor_email": email,
-            "is_admin": is_admin_email(email),
             "is_connected": is_connected,
             "quotes": list_quotes(email),
             "postventas": list_postventas(email),
+            "kpis": kpis,
             "msg": msg,
             "msg_type": msg_type,
         }
     )
+
 
 
 

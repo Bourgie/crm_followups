@@ -590,3 +590,65 @@ def list_admin_items(
 
     return items[:limit]
 
+def get_vendor_kpis(vendor_id: str) -> dict:
+    """
+    KPIs simples para el vendedor logueado.
+    - Se basan en status actual (quotes.status y postventas.status)
+    - % cierre = cerradas / (cerradas + perdidas) si hay datos
+    """
+    with get_conn() as conn:
+        # --- Quotes KPIs ---
+        q = conn.execute(
+            """
+            SELECT
+              COUNT(*) as total,
+              SUM(CASE WHEN COALESCE(status,'pendiente')='pendiente' THEN 1 ELSE 0 END) as pendiente,
+              SUM(CASE WHEN status='contactado' THEN 1 ELSE 0 END) as contactado,
+              SUM(CASE WHEN status='interesado' THEN 1 ELSE 0 END) as interesado,
+              SUM(CASE WHEN status='cerrada' THEN 1 ELSE 0 END) as cerrada,
+              SUM(CASE WHEN status='perdida' THEN 1 ELSE 0 END) as perdida
+            FROM quotes
+            WHERE vendor_id = ?
+            """,
+            (vendor_id,)
+        ).fetchone()
+
+        quotes = {
+            "total": q[0] or 0,
+            "pendiente": q[1] or 0,
+            "contactado": q[2] or 0,
+            "interesado": q[3] or 0,
+            "cerrada": q[4] or 0,
+            "perdida": q[5] or 0,
+        }
+
+        # --- Postventas KPIs ---
+        p = conn.execute(
+            """
+            SELECT
+              COUNT(*) as total,
+              SUM(CASE WHEN COALESCE(status,'pendiente')='pendiente' THEN 1 ELSE 0 END) as pendiente,
+              SUM(CASE WHEN status='realizada' THEN 1 ELSE 0 END) as realizada,
+              SUM(CASE WHEN status='cancelada' THEN 1 ELSE 0 END) as cancelada
+            FROM postventas
+            WHERE vendor_id = ?
+            """,
+            (vendor_id,)
+        ).fetchone()
+
+        postventas = {
+            "total": p[0] or 0,
+            "pendiente": p[1] or 0,
+            "realizada": p[2] or 0,
+            "cancelada": p[3] or 0,
+        }
+
+    # % cierre simple
+    closed_base = quotes["cerrada"] + quotes["perdida"]
+    close_rate = round((quotes["cerrada"] / closed_base) * 100, 1) if closed_base else None
+
+    return {
+        "quotes": quotes,
+        "postventas": postventas,
+        "close_rate": close_rate,  # None si no hay base
+    }
