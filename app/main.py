@@ -23,6 +23,7 @@ from .calendar_service import (
 from .google_oauth import (
     get_auth_url,
     exchange_code_for_creds,
+    save_creds_for_email,
     token_path_for_email,
     load_creds_for_email,
 )
@@ -140,8 +141,9 @@ def auth_callback(request: Request, code: str, state: str):
     creds = exchange_code_for_creds(code=code, vendor_id=state)
     email = get_google_user_email(creds)
 
-    token_path = token_path_for_email(email)
-    token_path.write_text(creds.to_json(), encoding="utf-8")
+    from .google_oauth import save_creds_for_email
+    save_creds_for_email(email, creds)
+
 
     request.session["vendor_email"] = email
     return RedirectResponse("/ui", status_code=303)
@@ -163,6 +165,7 @@ def ui_home(request: Request, msg: str = "", msg_type: str = ""):
         {
             "request": request,
             "vendor_email": email,
+            "is_admin": is_admin_email(email),
             "is_connected": is_connected,
             "quotes": list_quotes(email),
             "postventas": list_postventas(email),
@@ -170,6 +173,7 @@ def ui_home(request: Request, msg: str = "", msg_type: str = ""):
             "msg_type": msg_type,
         }
     )
+
 
 
 @app.post("/ui/upload")
@@ -229,11 +233,13 @@ def ui_quote(request: Request, quote_number: str, msg: str = "", msg_type: str =
         {
             "request": request,
             "vendor_email": email,
+            "is_admin": is_admin_email(email),
             "detail": detail,
             "msg": msg,
             "msg_type": msg_type,
         }
     )
+
 
 
 @app.post("/ui/quote/save")
@@ -349,6 +355,8 @@ def ui_postventa_new(request: Request, msg: str = "", msg_type: str = ""):
             "default_postventa_date": default_day,
             "msg": msg,
             "msg_type": msg_type,
+            "is_admin": is_admin_email(email),
+
         }
     )
 
@@ -412,7 +420,7 @@ def ui_postventa_detail(request: Request, postventa_id: int, msg: str = "", msg_
 
     return templates.TemplateResponse(
         "ui_postventa_detail.html",
-        {"request": request, "vendor_email": email, "pv": pv, "msg": msg, "msg_type": msg_type}
+        {"request": request, "vendor_email": email, "pv": pv, "msg": msg, "msg_type": msg_type, "is_admin": is_admin_email(email),}
     )
 
 

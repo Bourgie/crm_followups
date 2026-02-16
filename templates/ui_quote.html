@@ -16,6 +16,12 @@
 
     <div class="subtle" style="display:flex; gap:12px; align-items:center;">
       <span title="{{ vendor_email }}">{{ vendor_email }}</span>
+      {% if is_admin %}
+        <a href="/admin" style="color: rgba(255,255,255,.95); font-weight:800;">
+        Panel Admin
+        </a>
+      {% endif %}
+
       <a href="/logout" style="color: rgba(255,255,255,.85); font-weight:800;">Salir</a>
     </div>
   </div>
