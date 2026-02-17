@@ -785,6 +785,44 @@ def get_kpis(vendor_id: str | None = None, older_than_days: int = 7) -> dict:
         prev_close_rate = _safe_div(prev_quotes.get("cerrada", 0), prev_den)
 
         old_open = _count_old_open_quotes(conn, vendor_id, older_than_days=older_than_days)
+def _month_range(ref: datetime):
+    m0 = _first_day_of_month(ref)
+    m1 = _next_month(m0)
+    return _iso(m0), _iso(m1)
+
+def list_vendor_kpis_month(date_ref: datetime | None = None) -> list[dict]:
+    """
+    Ranking por vendedor del MES (cotizaciones, cerradas, perdidas, %cierre, postventas).
+    """
+    ref = date_ref or datetime.now()
+    df_iso, dt_iso = _month_range(ref)
+
+    vendors = list_vendors()
+    out = []
+    with get_conn() as conn:
+        for v in vendors:
+            q = _count_quotes(conn, v, df_iso, dt_iso)
+            p = _count_postventas(conn, v, df_iso, dt_iso)
+
+            den = q.get("cerrada", 0) + q.get("perdida", 0)
+            close_rate = _safe_div(q.get("cerrada", 0), den)
+
+            out.append({
+                "vendor_id": v,
+                "quotes_total": q.get("total", 0),
+                "quotes_cerrada": q.get("cerrada", 0),
+                "quotes_perdida": q.get("perdida", 0),
+                "quotes_pendiente": q.get("pendiente", 0),
+                "close_rate": None if close_rate is None else round(close_rate, 1),
+                "postventas_total": p.get("total", 0),
+                "postventas_pendiente": p.get("pendiente", 0),
+                "postventas_realizada": p.get("realizada", 0),
+                "postventas_cancelada": p.get("cancelada", 0),
+            })
+
+    # orden: más cerradas, luego más cotizaciones
+    out.sort(key=lambda x: (x["quotes_cerrada"], x["quotes_total"]), reverse=True)
+    return out
 
     # deltas (month vs prev)
     def delta(a: int, b: int) -> int:

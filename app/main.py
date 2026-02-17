@@ -47,7 +47,8 @@ from .db import (
     list_admin_items,
     # KPIs
     get_vendor_kpis,
-    get_kpis
+    get_kpis,
+    list_vendor_kpis_month
 )
 
 load_dotenv()
@@ -555,6 +556,7 @@ def admin_home(
     admin_email = require_admin(request)
 
     vendors = list_vendors()
+
     items = list_admin_items(
         vendor_id=vendor_id or None,
         status=status or None,
@@ -564,13 +566,14 @@ def admin_home(
         limit=500,
     )
 
-    filters = {
-        "vendor_id": vendor_id,
-        "status": status,
-        "kind": kind,
-        "date_from": date_from,
-        "date_to": date_to,
-    }
+    # KPIs globales del mes (para todo)
+    kpis_global = get_kpis(vendor_id=None, older_than_days=7)
+
+    # KPIs del mes del vendedor seleccionado (si aplica)
+    kpis_vendor = get_kpis(vendor_id=vendor_id or None, older_than_days=7) if vendor_id else None
+
+    # Ranking por vendedor del mes
+    ranking = list_vendor_kpis_month()
 
     return templates.TemplateResponse(
         "admin_home.html",
@@ -579,7 +582,16 @@ def admin_home(
             "admin_email": admin_email,
             "vendors": vendors,
             "items": items,
-            "filters": filters,  # ✅ FIX: el template lo necesita
+            "kpis_global": kpis_global,
+            "kpis_vendor": kpis_vendor,
+            "ranking": ranking,
+            "filters": {
+                "vendor_id": vendor_id,
+                "status": status,
+                "kind": kind,
+                "date_from": date_from,
+                "date_to": date_to,
+            },
             "msg": msg,
             "msg_type": msg_type,
         }
@@ -597,23 +609,52 @@ def admin_export_excel(
 ):
     require_admin(request)
 
+    vendor_filter = vendor_id.strip() or None
+    df = date_from.strip() or None
+    dt = date_to.strip() or None
+    st = status.strip() or None
+    kd = kind.strip() or "all"
+
     items = list_admin_items(
-        vendor_id=vendor_id or None,
-        status=status or None,
-        date_from=date_from or None,
-        date_to=date_to or None,
-        kind=kind or None,
+        vendor_id=vendor_filter,
+        status=st,
+        date_from=df,
+        date_to=dt,
+        kind=kd,
         limit=5000,
     )
 
     wb = Workbook()
-    ws = wb.active
-    ws.title = "Panel"
 
-    ws.append(["date", "kind", "vendor_id", "client_name", "ref", "status", "total", "summary"])
+    # --- Sheet KPIs ---
+    ws0 = wb.active
+    ws0.title = "KPIs"
+    g = get_kpis(vendor_id=None, older_than_days=7)
+    v = get_kpis(vendor_id=vendor_filter, older_than_days=7) if vendor_filter else None
 
+    ws0.append(["KPIs", "Valor"])
+    ws0.append(["Mes actual", f"{g['month']['from']} → {g['month']['to']}"])
+    ws0.append(["Cotizaciones (mes)", g["month"]["quotes"]["total"]])
+    ws0.append(["Cerradas (mes)", g["month"]["quotes"]["cerrada"]])
+    ws0.append(["Perdidas (mes)", g["month"]["quotes"]["perdida"]])
+    ws0.append(["% cierre (mes)", g["month"]["close_rate"] if g["month"]["close_rate"] is not None else ""])
+    ws0.append(["Postventas (mes)", g["month"]["postventas"]["total"]])
+    ws0.append(["Alertas: abiertas +7d", g["alerts"]["old_open_quotes"]])
+
+    if v:
+        ws0.append([])
+        ws0.append(["KPIs vendedor", vendor_filter])
+        ws0.append(["Cotizaciones (mes)", v["month"]["quotes"]["total"]])
+        ws0.append(["Cerradas (mes)", v["month"]["quotes"]["cerrada"]])
+        ws0.append(["Perdidas (mes)", v["month"]["quotes"]["perdida"]])
+        ws0.append(["% cierre (mes)", v["month"]["close_rate"] if v["month"]["close_rate"] is not None else ""])
+        ws0.append(["Postventas (mes)", v["month"]["postventas"]["total"]])
+
+    # --- Sheet Items (filtros actuales) ---
+    ws1 = wb.create_sheet("Items")
+    ws1.append(["date", "kind", "vendor", "client_name", "ref", "status", "total", "summary", "created_at"])
     for it in items:
-        ws.append([
+        ws1.append([
             it.get("date", ""),
             it.get("kind", ""),
             it.get("vendor_id", ""),
@@ -622,6 +663,21 @@ def admin_export_excel(
             it.get("status", ""),
             it.get("total", ""),
             it.get("summary", ""),
+            it.get("created_at", ""),
+        ])
+
+    # --- Sheet Ranking ---
+    ws2 = wb.create_sheet("Ranking vendedores (mes)")
+    ws2.append(["vendor", "quotes_total", "cerradas", "perdidas", "pendientes", "%cierre", "postventas_total"])
+    for r in list_vendor_kpis_month():
+        ws2.append([
+            r["vendor_id"],
+            r["quotes_total"],
+            r["quotes_cerrada"],
+            r["quotes_perdida"],
+            r["quotes_pendiente"],
+            r["close_rate"] if r["close_rate"] is not None else "",
+            r["postventas_total"],
         ])
 
     buf = io.BytesIO()
@@ -634,6 +690,7 @@ def admin_export_excel(
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'}
     )
+
 
 
 # -----------------------------
