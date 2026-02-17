@@ -1,6 +1,6 @@
 import sqlite3
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timedelta
 import json
 
 # DB en la raíz del proyecto (crm_followups/data.sqlite)
@@ -651,4 +651,181 @@ def get_vendor_kpis(vendor_id: str) -> dict:
         "quotes": quotes,
         "postventas": postventas,
         "close_rate": close_rate,  # None si no hay base
+    }
+
+# -----------------------------
+# KPIs
+# -----------------------------
+
+def _first_day_of_month(d: datetime) -> datetime:
+    return d.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+
+def _next_month(d: datetime) -> datetime:
+    # d = first day of month
+    if d.month == 12:
+        return d.replace(year=d.year + 1, month=1)
+    return d.replace(month=d.month + 1)
+
+def _iso(dt: datetime) -> str:
+    return dt.isoformat()
+
+def _safe_div(num: int, den: int) -> float | None:
+    if den <= 0:
+        return None
+    return (num / den) * 100.0
+
+def _count_quotes(conn, vendor_id: str | None, date_from_iso: str | None, date_to_iso: str | None):
+    sql = """
+        SELECT COALESCE(status,'pendiente') as st, COUNT(*)
+        FROM quotes
+        WHERE 1=1
+    """
+    params = []
+    if vendor_id:
+        sql += " AND vendor_id = ?"
+        params.append(vendor_id)
+    if date_from_iso:
+        sql += " AND created_at >= ?"
+        params.append(date_from_iso)
+    if date_to_iso:
+        sql += " AND created_at < ?"
+        params.append(date_to_iso)
+
+    sql += " GROUP BY COALESCE(status,'pendiente')"
+    rows = conn.execute(sql, params).fetchall()
+
+    out = {"total": 0, "pendiente": 0, "contactado": 0, "interesado": 0, "cerrada": 0, "perdida": 0}
+    for st, c in rows:
+        st = (st or "pendiente").strip().lower()
+        if st not in out:
+            # por si aparece alguno nuevo
+            out[st] = 0
+        out[st] += int(c)
+        out["total"] += int(c)
+    return out
+
+def _count_postventas(conn, vendor_id: str | None, date_from_iso: str | None, date_to_iso: str | None):
+    sql = """
+        SELECT COALESCE(status,'pendiente') as st, COUNT(*)
+        FROM postventas
+        WHERE 1=1
+    """
+    params = []
+    if vendor_id:
+        sql += " AND vendor_id = ?"
+        params.append(vendor_id)
+    if date_from_iso:
+        sql += " AND created_at >= ?"
+        params.append(date_from_iso)
+    if date_to_iso:
+        sql += " AND created_at < ?"
+        params.append(date_to_iso)
+
+    sql += " GROUP BY COALESCE(status,'pendiente')"
+    rows = conn.execute(sql, params).fetchall()
+
+    out = {"total": 0, "pendiente": 0, "realizada": 0, "cancelada": 0}
+    for st, c in rows:
+        st = (st or "pendiente").strip().lower()
+        if st not in out:
+            out[st] = 0
+        out[st] += int(c)
+        out["total"] += int(c)
+    return out
+
+def _count_old_open_quotes(conn, vendor_id: str | None, older_than_days: int = 7) -> int:
+    # “viejas”: abiertas (no cerrada/perdida) y creadas hace X días
+    cutoff = (datetime.now() - timedelta(days=older_than_days)).isoformat()
+    sql = """
+        SELECT COUNT(*)
+        FROM quotes
+        WHERE 1=1
+          AND created_at <= ?
+          AND COALESCE(status,'pendiente') NOT IN ('cerrada','perdida')
+    """
+    params = [cutoff]
+    if vendor_id:
+        sql += " AND vendor_id = ?"
+        params.append(vendor_id)
+    return int(conn.execute(sql, params).fetchone()[0])
+
+def get_kpis(vendor_id: str | None = None, older_than_days: int = 7) -> dict:
+    """
+    KPIs completos:
+    - lifetime
+    - mes actual (MTD)
+    - mes anterior
+    - comparación
+    """
+    now = datetime.now()
+    m0 = _first_day_of_month(now)
+    m1 = _next_month(m0)
+
+    prev0 = _first_day_of_month(m0 - timedelta(days=1))  # primer día mes anterior
+    prev1 = m0
+
+    with get_conn() as conn:
+        # lifetime
+        life_quotes = _count_quotes(conn, vendor_id, None, None)
+        life_postv  = _count_postventas(conn, vendor_id, None, None)
+
+        # month current
+        cur_quotes = _count_quotes(conn, vendor_id, _iso(m0), _iso(m1))
+        cur_postv  = _count_postventas(conn, vendor_id, _iso(m0), _iso(m1))
+
+        # prev month
+        prev_quotes = _count_quotes(conn, vendor_id, _iso(prev0), _iso(prev1))
+        prev_postv  = _count_postventas(conn, vendor_id, _iso(prev0), _iso(prev1))
+
+        # close rate (def: cerrada / (cerrada + perdida))
+        cur_den = cur_quotes.get("cerrada", 0) + cur_quotes.get("perdida", 0)
+        prev_den = prev_quotes.get("cerrada", 0) + prev_quotes.get("perdida", 0)
+
+        cur_close_rate = _safe_div(cur_quotes.get("cerrada", 0), cur_den)
+        prev_close_rate = _safe_div(prev_quotes.get("cerrada", 0), prev_den)
+
+        old_open = _count_old_open_quotes(conn, vendor_id, older_than_days=older_than_days)
+
+    # deltas (month vs prev)
+    def delta(a: int, b: int) -> int:
+        return int(a) - int(b)
+
+    def delta_pct(a: int, b: int) -> float | None:
+        # % cambio vs mes anterior
+        return None if b == 0 else ((a - b) / b) * 100.0
+
+    compare = {
+        "quotes_total_delta": delta(cur_quotes["total"], prev_quotes["total"]),
+        "quotes_total_delta_pct": delta_pct(cur_quotes["total"], prev_quotes["total"]),
+        "quotes_cerrada_delta": delta(cur_quotes.get("cerrada", 0), prev_quotes.get("cerrada", 0)),
+        "quotes_cerrada_delta_pct": delta_pct(cur_quotes.get("cerrada", 0), prev_quotes.get("cerrada", 0)),
+        "postventas_total_delta": delta(cur_postv["total"], prev_postv["total"]),
+        "postventas_total_delta_pct": delta_pct(cur_postv["total"], prev_postv["total"]),
+        "close_rate_delta": None if (cur_close_rate is None or prev_close_rate is None) else (cur_close_rate - prev_close_rate),
+    }
+
+    return {
+        "lifetime": {
+            "quotes": life_quotes,
+            "postventas": life_postv,
+        },
+        "month": {
+            "from": m0.strftime("%Y-%m-%d"),
+            "to": (m1 - timedelta(days=1)).strftime("%Y-%m-%d"),
+            "quotes": cur_quotes,
+            "postventas": cur_postv,
+            "close_rate": None if cur_close_rate is None else round(cur_close_rate, 1),
+        },
+        "prev_month": {
+            "from": prev0.strftime("%Y-%m-%d"),
+            "to": (prev1 - timedelta(days=1)).strftime("%Y-%m-%d"),
+            "quotes": prev_quotes,
+            "postventas": prev_postv,
+            "close_rate": None if prev_close_rate is None else round(prev_close_rate, 1),
+        },
+        "compare": compare,
+        "alerts": {
+            "old_open_quotes": old_open,
+            "older_than_days": older_than_days,
+        }
     }

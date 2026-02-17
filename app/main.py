@@ -47,6 +47,7 @@ from .db import (
     list_admin_items,
     # KPIs
     get_vendor_kpis,
+    get_kpis
 )
 
 load_dotenv()
@@ -154,6 +155,7 @@ def auth_callback(request: Request, code: str, state: str):
 # -----------------------------
 # UI (vendedor)
 # -----------------------------
+
 @app.get("/ui", response_class=HTMLResponse)
 def ui_home(request: Request, msg: str = "", msg_type: str = ""):
     email = current_email(request)
@@ -162,7 +164,7 @@ def ui_home(request: Request, msg: str = "", msg_type: str = ""):
 
     is_connected = token_path_for_email(email).exists()
 
-    kpis = get_vendor_kpis(email)
+    kpis = get_kpis(vendor_id=email, older_than_days=7)
 
     return templates.TemplateResponse(
         "ui_home.html",
@@ -173,6 +175,7 @@ def ui_home(request: Request, msg: str = "", msg_type: str = ""):
             "quotes": list_quotes(email),
             "postventas": list_postventas(email),
             "kpis": kpis,
+            "is_admin": is_admin_email(email),  # <-- ya lo venías usando
             "msg": msg,
             "msg_type": msg_type,
         }
