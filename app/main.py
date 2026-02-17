@@ -3,6 +3,7 @@ import io
 import hashlib
 from datetime import datetime, timedelta
 from pathlib import Path
+from urllib.parse import urlencode
 
 import requests
 from dotenv import load_dotenv
@@ -23,9 +24,9 @@ from .calendar_service import (
 from .google_oauth import (
     get_auth_url,
     exchange_code_for_creds,
-    save_creds_for_email,
     token_path_for_email,
     load_creds_for_email,
+    save_creds_for_email,
 )
 from .db import (
     init_db,
@@ -46,9 +47,8 @@ from .db import (
     list_vendors,
     list_admin_items,
     # KPIs
-    get_vendor_kpis,
     get_kpis,
-    list_vendor_kpis_month
+    list_vendor_kpis_month,
 )
 
 load_dotenv()
@@ -62,19 +62,25 @@ STATIC_DIR = APP_DIR / "static"
 
 app = FastAPI(title="CRM Followups MVP")
 
-# --- Sessions ---
+# -----------------------------
+# Middleware: Sessions
+# -----------------------------
 app.add_middleware(
     SessionMiddleware,
     secret_key=os.getenv("SESSION_SECRET", "cambia-esto-por-una-clave-larga"),
     same_site="lax",
-    https_only=False,  # local False; en prod True con HTTPS
+    https_only=os.getenv("HTTPS_ONLY", "0") == "1",  # local 0; prod 1 con HTTPS
 )
 
-# --- Static + Templates ---
+# -----------------------------
+# Static + Templates
+# -----------------------------
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
-# --- DB ---
+# -----------------------------
+# DB init
+# -----------------------------
 init_db()
 
 
@@ -96,8 +102,9 @@ def get_google_user_email(creds) -> str:
 
 
 def redirect_with_msg(url: str, msg: str, msg_type: str = "success") -> RedirectResponse:
-    msg = msg.replace(" ", "+")
-    return RedirectResponse(f"{url}?msg={msg}&msg_type={msg_type}", status_code=303)
+    # Maneja tildes, símbolos, etc. de forma correcta
+    qs = urlencode({"msg": msg, "msg_type": msg_type})
+    return RedirectResponse(f"{url}?{qs}", status_code=303)
 
 
 def admin_emails() -> set[str]:
@@ -106,7 +113,7 @@ def admin_emails() -> set[str]:
 
 
 def is_admin_email(email: str) -> bool:
-    return email.strip().lower() in admin_emails()
+    return (email or "").strip().lower() in admin_emails()
 
 
 def require_admin(request: Request) -> str:
@@ -118,14 +125,20 @@ def require_admin(request: Request) -> str:
     return email
 
 
+def save_uploaded_pdf(pdf: UploadFile, content: bytes) -> Path:
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    safe_name = (pdf.filename or "archivo.pdf").replace("/", "_").replace("\\", "_")
+    out_path = UPLOADS_DIR / f"{ts}_{safe_name}"
+    out_path.write_bytes(content)
+    return out_path
+
+
 # -----------------------------
 # Auth
 # -----------------------------
 @app.get("/", response_class=HTMLResponse)
 def root(request: Request):
-    if current_email(request):
-        return RedirectResponse("/ui", status_code=303)
-    return RedirectResponse("/login", status_code=303)
+    return RedirectResponse("/ui", status_code=303) if current_email(request) else RedirectResponse("/login", status_code=303)
 
 
 @app.get("/login")
@@ -145,9 +158,7 @@ def auth_callback(request: Request, code: str, state: str):
     creds = exchange_code_for_creds(code=code, vendor_id=state)
     email = get_google_user_email(creds)
 
-    from .google_oauth import save_creds_for_email
     save_creds_for_email(email, creds)
-
 
     request.session["vendor_email"] = email
     return RedirectResponse("/ui", status_code=303)
@@ -156,7 +167,6 @@ def auth_callback(request: Request, code: str, state: str):
 # -----------------------------
 # UI (vendedor)
 # -----------------------------
-
 @app.get("/ui", response_class=HTMLResponse)
 def ui_home(request: Request, msg: str = "", msg_type: str = ""):
     email = current_email(request)
@@ -164,7 +174,6 @@ def ui_home(request: Request, msg: str = "", msg_type: str = ""):
         return RedirectResponse("/login", status_code=303)
 
     is_connected = token_path_for_email(email).exists()
-
     kpis = get_kpis(vendor_id=email, older_than_days=7)
 
     return templates.TemplateResponse(
@@ -176,13 +185,11 @@ def ui_home(request: Request, msg: str = "", msg_type: str = ""):
             "quotes": list_quotes(email),
             "postventas": list_postventas(email),
             "kpis": kpis,
-            "is_admin": is_admin_email(email),  # <-- ya lo venías usando
+            "is_admin": is_admin_email(email),
             "msg": msg,
             "msg_type": msg_type,
-        }
+        },
     )
-
-
 
 
 @app.post("/ui/upload")
@@ -191,16 +198,13 @@ async def ui_upload(request: Request, pdf: UploadFile = File(...)):
     if not email:
         return RedirectResponse("/login", status_code=303)
 
-    if not pdf.filename.lower().endswith(".pdf"):
+    if not (pdf.filename or "").lower().endswith(".pdf"):
         return redirect_with_msg("/ui", "Archivo no es PDF", "error")
 
     content = await pdf.read()
     pdf_sha256 = hashlib.sha256(content).hexdigest()
 
-    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    safe_name = pdf.filename.replace("/", "_").replace("\\", "_")
-    out_path = UPLOADS_DIR / f"{ts}_{safe_name}"
-    out_path.write_bytes(content)
+    out_path = save_uploaded_pdf(pdf, content)
 
     creds = load_creds_for_email(email)
     if creds is None:
@@ -246,9 +250,8 @@ def ui_quote(request: Request, quote_number: str, msg: str = "", msg_type: str =
             "detail": detail,
             "msg": msg,
             "msg_type": msg_type,
-        }
+        },
     )
-
 
 
 @app.post("/ui/quote/save")
@@ -263,7 +266,6 @@ def ui_quote_save(
     if not email:
         return RedirectResponse("/login", status_code=303)
 
-    # Guardar cambios
     update_notes(vendor_id=email, quote_number=quote_number, summary=summary, notes=notes, status=status)
 
     new_s = (status or "").strip().lower()
@@ -275,33 +277,37 @@ def ui_quote_save(
 
         if not event_ids:
             clear_events(vendor_id=email, quote_number=quote_number)
-            return RedirectResponse(
-                f"/ui/quote?quote_number={quote_number}&msg=Guardado+OK+(sin+eventos+para+cancelar)&msg_type=success",
-                status_code=303
+            return redirect_with_msg(
+                f"/ui/quote?quote_number={quote_number}",
+                "Guardado OK (sin eventos para cancelar)",
+                "success",
             )
 
         creds = load_creds_for_email(email)
         if creds is None:
-            return RedirectResponse(
-                f"/ui/quote?quote_number={quote_number}&msg=No+hay+credenciales+para+borrar+eventos&msg_type=error",
-                status_code=303
+            return redirect_with_msg(
+                f"/ui/quote?quote_number={quote_number}",
+                "No hay credenciales para borrar eventos",
+                "error",
             )
 
         result = delete_events(creds=creds, event_ids=event_ids, calendar_id="primary")
         print(f"[AUTO CANCEL RESULT] {result}")
 
         if result.get("failed"):
-            return RedirectResponse(
-                f"/ui/quote?quote_number={quote_number}&msg=Error+borrando+eventos+(ver+consola)&msg_type=error",
-                status_code=303
+            return redirect_with_msg(
+                f"/ui/quote?quote_number={quote_number}",
+                "Error borrando eventos (ver consola)",
+                "error",
             )
 
         clear_events(vendor_id=email, quote_number=quote_number)
         print(f"[AUTO CANCEL] events_json limpiado para {quote_number}")
 
-    return RedirectResponse(
-        f"/ui/quote?quote_number={quote_number}&msg=Guardado+OK&msg_type=success",
-        status_code=303
+    return redirect_with_msg(
+        f"/ui/quote?quote_number={quote_number}",
+        "Guardado OK",
+        "success",
     )
 
 
@@ -316,32 +322,35 @@ def ui_quote_cancel(request: Request, quote_number: str = Form(...)):
 
     if not event_ids:
         clear_events(vendor_id=email, quote_number=quote_number)
-        return RedirectResponse(
-            f"/ui/quote?quote_number={quote_number}&msg=No+habia+recordatorios+para+cancelar&msg_type=success",
-            status_code=303
+        return redirect_with_msg(
+            f"/ui/quote?quote_number={quote_number}",
+            "No había recordatorios para cancelar",
+            "success",
         )
 
     creds = load_creds_for_email(email)
     if creds is None:
-        return RedirectResponse(
-            f"/ui/quote?quote_number={quote_number}&msg=No+hay+credenciales+para+cancelar&msg_type=error",
-            status_code=303
+        return redirect_with_msg(
+            f"/ui/quote?quote_number={quote_number}",
+            "No hay credenciales para cancelar",
+            "error",
         )
 
     result = delete_events(creds=creds, event_ids=event_ids, calendar_id="primary")
     print(f"[MANUAL CANCEL RESULT] {result}")
 
     if result.get("failed"):
-        return RedirectResponse(
-            f"/ui/quote?quote_number={quote_number}&msg=Error+cancelando+(ver+consola)&msg_type=error",
-            status_code=303
+        return redirect_with_msg(
+            f"/ui/quote?quote_number={quote_number}",
+            "Error cancelando (ver consola)",
+            "error",
         )
 
     clear_events(vendor_id=email, quote_number=quote_number)
-
-    return RedirectResponse(
-        f"/ui/quote?quote_number={quote_number}&msg=Recordatorios+cancelados&msg_type=success",
-        status_code=303
+    return redirect_with_msg(
+        f"/ui/quote?quote_number={quote_number}",
+        "Recordatorios cancelados",
+        "success",
     )
 
 
@@ -365,8 +374,7 @@ def ui_postventa_new(request: Request, msg: str = "", msg_type: str = ""):
             "msg": msg,
             "msg_type": msg_type,
             "is_admin": is_admin_email(email),
-
-        }
+        },
     )
 
 
@@ -411,9 +419,10 @@ def ui_postventa_create(
         event=event,
     )
 
-    return RedirectResponse(
-        f"/ui/postventa?postventa_id={new_id}&msg=Postventa+creada&msg_type=success",
-        status_code=303
+    return redirect_with_msg(
+        f"/ui/postventa?postventa_id={new_id}",
+        "Postventa creada",
+        "success",
     )
 
 
@@ -425,11 +434,18 @@ def ui_postventa_detail(request: Request, postventa_id: int, msg: str = "", msg_
 
     pv = get_postventa_detail(vendor_id=email, postventa_id=postventa_id)
     if not pv:
-        return RedirectResponse("/ui?msg=Postventa+no+encontrada&msg_type=error", status_code=303)
+        return redirect_with_msg("/ui", "Postventa no encontrada", "error")
 
     return templates.TemplateResponse(
         "ui_postventa_detail.html",
-        {"request": request, "vendor_email": email, "pv": pv, "msg": msg, "msg_type": msg_type, "is_admin": is_admin_email(email),}
+        {
+            "request": request,
+            "vendor_email": email,
+            "pv": pv,
+            "msg": msg,
+            "msg_type": msg_type,
+            "is_admin": is_admin_email(email),
+        },
     )
 
 
@@ -441,9 +457,10 @@ def ui_postventa_done(request: Request, postventa_id: int = Form(...)):
 
     update_postventa_status(vendor_id=email, postventa_id=postventa_id, status="realizada")
 
-    return RedirectResponse(
-        f"/ui/postventa?postventa_id={postventa_id}&msg=Marcada+como+realizada&msg_type=success",
-        status_code=303
+    return redirect_with_msg(
+        f"/ui/postventa?postventa_id={postventa_id}",
+        "Marcada como realizada",
+        "success",
     )
 
 
@@ -455,32 +472,35 @@ def ui_postventa_cancel(request: Request, postventa_id: int = Form(...)):
 
     pv = get_postventa_detail(vendor_id=email, postventa_id=postventa_id)
     if not pv:
-        return RedirectResponse("/ui?msg=Postventa+no+encontrada&msg_type=error", status_code=303)
+        return redirect_with_msg("/ui", "Postventa no encontrada", "error")
 
     event_id = pv.get("event_id")
     if event_id:
         creds = load_creds_for_email(email)
         if creds is None:
-            return RedirectResponse(
-                f"/ui/postventa?postventa_id={postventa_id}&msg=No+hay+credenciales&msg_type=error",
-                status_code=303
+            return redirect_with_msg(
+                f"/ui/postventa?postventa_id={postventa_id}",
+                "No hay credenciales",
+                "error",
             )
 
         result = delete_events(creds=creds, event_ids=[event_id], calendar_id="primary")
         print("[POSTVENTA CANCEL RESULT]", result)
 
         if result.get("failed"):
-            return RedirectResponse(
-                f"/ui/postventa?postventa_id={postventa_id}&msg=Error+borrando+evento+(ver+consola)&msg_type=error",
-                status_code=303
+            return redirect_with_msg(
+                f"/ui/postventa?postventa_id={postventa_id}",
+                "Error borrando evento (ver consola)",
+                "error",
             )
 
     update_postventa_status(vendor_id=email, postventa_id=postventa_id, status="cancelada")
     clear_postventa_event(vendor_id=email, postventa_id=postventa_id)
 
-    return RedirectResponse(
-        f"/ui/postventa?postventa_id={postventa_id}&msg=Postventa+cancelada&msg_type=success",
-        status_code=303
+    return redirect_with_msg(
+        f"/ui/postventa?postventa_id={postventa_id}",
+        "Postventa cancelada",
+        "success",
     )
 
 
@@ -492,13 +512,14 @@ def ui_quote_create_postventa(request: Request, quote_number: str = Form(...)):
 
     detail = get_quote_detail(vendor_id=email, quote_number=quote_number)
     if not detail:
-        return RedirectResponse("/ui?msg=Cotizacion+no+encontrada&msg_type=error", status_code=303)
+        return redirect_with_msg("/ui", "Cotización no encontrada", "error")
 
     status = (detail.get("status") or "").strip().lower()
     if status != "cerrada":
-        return RedirectResponse(
-            f"/ui/quote?quote_number={quote_number}&msg=Solo+disponible+si+esta+cerrada&msg_type=error",
-            status_code=303
+        return redirect_with_msg(
+            f"/ui/quote?quote_number={quote_number}",
+            "Solo disponible si está cerrada",
+            "error",
         )
 
     extracted = detail.get("extracted") or {}
@@ -533,9 +554,10 @@ def ui_quote_create_postventa(request: Request, quote_number: str = Form(...)):
         event=event,
     )
 
-    return RedirectResponse(
-        f"/ui/postventa?postventa_id={new_id}&msg=Postventa+creada+%2B7+dias&msg_type=success",
-        status_code=303
+    return redirect_with_msg(
+        f"/ui/postventa?postventa_id={new_id}",
+        "Postventa creada +7 días",
+        "success",
     )
 
 
@@ -558,19 +580,19 @@ def admin_home(
     vendors = list_vendors()
 
     items = list_admin_items(
-        vendor_id=vendor_id or None,
-        status=status or None,
-        date_from=date_from or None,
-        date_to=date_to or None,
-        kind=kind or None,
+        vendor_id=vendor_id.strip() or None,
+        status=status.strip() or None,
+        date_from=date_from.strip() or None,
+        date_to=date_to.strip() or None,
+        kind=(kind.strip() or "all"),
         limit=500,
     )
 
-    # KPIs globales del mes (para todo)
+    # KPIs globales del mes (todo)
     kpis_global = get_kpis(vendor_id=None, older_than_days=7)
 
     # KPIs del mes del vendedor seleccionado (si aplica)
-    kpis_vendor = get_kpis(vendor_id=vendor_id or None, older_than_days=7) if vendor_id else None
+    kpis_vendor = get_kpis(vendor_id=vendor_id.strip() or None, older_than_days=7) if vendor_id.strip() else None
 
     # Ranking por vendedor del mes
     ranking = list_vendor_kpis_month()
@@ -594,7 +616,7 @@ def admin_home(
             },
             "msg": msg,
             "msg_type": msg_type,
-        }
+        },
     )
 
 
@@ -629,6 +651,7 @@ def admin_export_excel(
     # --- Sheet KPIs ---
     ws0 = wb.active
     ws0.title = "KPIs"
+
     g = get_kpis(vendor_id=None, older_than_days=7)
     v = get_kpis(vendor_id=vendor_filter, older_than_days=7) if vendor_filter else None
 
@@ -688,9 +711,8 @@ def admin_export_excel(
     return StreamingResponse(
         buf,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
-
 
 
 # -----------------------------
@@ -702,16 +724,12 @@ async def api_upload_pdf(request: Request, pdf: UploadFile = File(...)):
     if not email:
         return JSONResponse({"error": "No logueado. Abrí /login y autorizá."}, status_code=401)
 
-    if not pdf.filename.lower().endswith(".pdf"):
+    if not (pdf.filename or "").lower().endswith(".pdf"):
         return JSONResponse({"error": "Subí un archivo .pdf"}, status_code=400)
 
     content = await pdf.read()
     pdf_sha256 = hashlib.sha256(content).hexdigest()
-
-    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    safe_name = pdf.filename.replace("/", "_").replace("\\", "_")
-    out_path = UPLOADS_DIR / f"{ts}_{safe_name}"
-    out_path.write_bytes(content)
+    out_path = save_uploaded_pdf(pdf, content)
 
     creds = load_creds_for_email(email)
     if creds is None:

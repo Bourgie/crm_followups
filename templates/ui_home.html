@@ -1,11 +1,13 @@
 <!doctype html>
 <html lang="es">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
   <title>Pizarro • Seguimiento</title>
   <link rel="stylesheet" href="/static/styles.css">
 </head>
+
 <body>
 
 <header class="topbar">
@@ -37,100 +39,32 @@
     <div class="notice {{ msg_type }}">{{ msg }}</div>
   {% endif %}
 
-  <!-- ================= KPIs ================= -->
-   {% if kpis %}
-<div class="card">
-  <h2 style="margin-top:0;">KPIs (Mes)</h2>
-
-  <div class="row" style="gap:12px; margin-top:10px;">
-    <div class="col">
-      <div class="card" style="box-shadow:none;">
-        <div><b>Mes actual</b> <small>({{ kpis.month.from }} → {{ kpis.month.to }})</small></div>
-        <div style="margin-top:8px;"><small>Cotizaciones:</small> <b>{{ kpis.month.quotes.total }}</b></div>
-        <div><small>Cerradas:</small> {{ kpis.month.quotes.cerrada }}</div>
-        <div><small>Perdidas:</small> {{ kpis.month.quotes.perdida }}</div>
-        <div><small>Pendientes:</small> {{ kpis.month.quotes.pendiente }}</div>
-
-        <div style="margin-top:8px;">
-          <small>% cierre:</small>
-          <b>{% if kpis.month.close_rate is not none %}{{ kpis.month.close_rate }}%{% else %}-{% endif %}</b>
-        </div>
-      </div>
-    </div>
-
-    <div class="col">
-      <div class="card" style="box-shadow:none;">
-        <div><b>Mes anterior</b> <small>({{ kpis.prev_month.from }} → {{ kpis.prev_month.to }})</small></div>
-        <div style="margin-top:8px;"><small>Cotizaciones:</small> <b>{{ kpis.prev_month.quotes.total }}</b></div>
-        <div><small>Cerradas:</small> {{ kpis.prev_month.quotes.cerrada }}</div>
-        <div><small>Perdidas:</small> {{ kpis.prev_month.quotes.perdida }}</div>
-
-        <div style="margin-top:8px;">
-          <small>% cierre:</small>
-          <b>{% if kpis.prev_month.close_rate is not none %}{{ kpis.prev_month.close_rate }}%{% else %}-{% endif %}</b>
-        </div>
-      </div>
-    </div>
-
-    <div class="col">
-      <div class="card" style="box-shadow:none;">
-        <div><b>Comparación</b> <small>(Mes vs anterior)</small></div>
-
-        <div style="margin-top:8px;">
-          <small>Δ cotizaciones:</small>
-          <b>{{ kpis.compare.quotes_total_delta }}</b>
-          {% if kpis.compare.quotes_total_delta_pct is not none %}
-            <small>({{ '%.1f'|format(kpis.compare.quotes_total_delta_pct) }}%)</small>
-          {% endif %}
-        </div>
-
-        <div>
-          <small>Δ cerradas:</small>
-          <b>{{ kpis.compare.quotes_cerrada_delta }}</b>
-          {% if kpis.compare.quotes_cerrada_delta_pct is not none %}
-            <small>({{ '%.1f'|format(kpis.compare.quotes_cerrada_delta_pct) }}%)</small>
-          {% endif %}
-        </div>
-
-        <div>
-          <small>Δ postventas:</small>
-          <b>{{ kpis.compare.postventas_total_delta }}</b>
-          {% if kpis.compare.postventas_total_delta_pct is not none %}
-            <small>({{ '%.1f'|format(kpis.compare.postventas_total_delta_pct) }}%)</small>
-          {% endif %}
-        </div>
-
-        <div style="margin-top:8px;">
-          <small>Alertas:</small>
-          <div><b>{{ kpis.alerts.old_open_quotes }}</b> cotizaciones abiertas con +{{ kpis.alerts.older_than_days }} días</div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <div style="margin-top:10px;">
-    <small><b>Histórico:</b> {{ kpis.lifetime.quotes.total }} cotizaciones • {{ kpis.lifetime.postventas.total }} postventas</small>
-  </div>
-</div>
-{% endif %}
-
+  {# ================= KPIs ================= #}
   {% if kpis %}
   <div class="card">
-    <h2 style="margin-top:0;">KPIs</h2>
+    <h2 style="margin-top:0;">KPIs (Mes)</h2>
 
-    <div class="row" style="gap:12px; margin-top:10px; flex-wrap:wrap;">
+    <div class="row" style="gap:12px; margin-top:10px;">
       <div class="col">
         <div class="card" style="box-shadow:none;">
-          <b>Cotizaciones</b>
-          <div><small>Total:</small> {{ kpis.quotes.total }}</div>
-          <div><small>Pendientes:</small> {{ kpis.quotes.pendiente }}</div>
-          <div><small>Cerradas:</small> {{ kpis.quotes.cerrada }}</div>
-          <div><small>Perdidas:</small> {{ kpis.quotes.perdida }}</div>
-          <div style="margin-top:6px;">
+          <div>
+            <b>Mes actual</b>
+            <small>({{ kpis.month.from }} → {{ kpis.month.to }})</small>
+          </div>
+
+          <div style="margin-top:8px;">
+            <small>Cotizaciones:</small>
+            <b>{{ kpis.month.quotes.total }}</b>
+          </div>
+          <div><small>Cerradas:</small> {{ kpis.month.quotes.cerrada }}</div>
+          <div><small>Perdidas:</small> {{ kpis.month.quotes.perdida }}</div>
+          <div><small>Pendientes:</small> {{ kpis.month.quotes.pendiente }}</div>
+
+          <div style="margin-top:8px;">
             <small>% cierre:</small>
             <b>
-              {% if kpis.close_rate is not none %}
-                {{ kpis.close_rate }}%
+              {% if kpis.month.close_rate is not none %}
+                {{ kpis.month.close_rate }}%
               {% else %}
                 -
               {% endif %}
@@ -141,18 +75,84 @@
 
       <div class="col">
         <div class="card" style="box-shadow:none;">
-          <b>Postventas</b>
-          <div><small>Total:</small> {{ kpis.postventas.total }}</div>
-          <div><small>Pendientes:</small> {{ kpis.postventas.pendiente }}</div>
-          <div><small>Realizadas:</small> {{ kpis.postventas.realizada }}</div>
-          <div><small>Canceladas:</small> {{ kpis.postventas.cancelada }}</div>
+          <div>
+            <b>Mes anterior</b>
+            <small>({{ kpis.prev_month.from }} → {{ kpis.prev_month.to }})</small>
+          </div>
+
+          <div style="margin-top:8px;">
+            <small>Cotizaciones:</small>
+            <b>{{ kpis.prev_month.quotes.total }}</b>
+          </div>
+          <div><small>Cerradas:</small> {{ kpis.prev_month.quotes.cerrada }}</div>
+          <div><small>Perdidas:</small> {{ kpis.prev_month.quotes.perdida }}</div>
+
+          <div style="margin-top:8px;">
+            <small>% cierre:</small>
+            <b>
+              {% if kpis.prev_month.close_rate is not none %}
+                {{ kpis.prev_month.close_rate }}%
+              {% else %}
+                -
+              {% endif %}
+            </b>
+          </div>
         </div>
       </div>
+
+      <div class="col">
+        <div class="card" style="box-shadow:none;">
+          <div>
+            <b>Comparación</b>
+            <small>(Mes vs anterior)</small>
+          </div>
+
+          <div style="margin-top:8px;">
+            <small>Δ cotizaciones:</small>
+            <b>{{ kpis.compare.quotes_total_delta }}</b>
+            {% if kpis.compare.quotes_total_delta_pct is not none %}
+              <small>({{ '%.1f'|format(kpis.compare.quotes_total_delta_pct) }}%)</small>
+            {% endif %}
+          </div>
+
+          <div>
+            <small>Δ cerradas:</small>
+            <b>{{ kpis.compare.quotes_cerrada_delta }}</b>
+            {% if kpis.compare.quotes_cerrada_delta_pct is not none %}
+              <small>({{ '%.1f'|format(kpis.compare.quotes_cerrada_delta_pct) }}%)</small>
+            {% endif %}
+          </div>
+
+          <div>
+            <small>Δ postventas:</small>
+            <b>{{ kpis.compare.postventas_total_delta }}</b>
+            {% if kpis.compare.postventas_total_delta_pct is not none %}
+              <small>({{ '%.1f'|format(kpis.compare.postventas_total_delta_pct) }}%)</small>
+            {% endif %}
+          </div>
+
+          <div style="margin-top:8px;">
+            <small>Alertas:</small>
+            <div>
+              <b>{{ kpis.alerts.old_open_quotes }}</b>
+              cotizaciones abiertas con +{{ kpis.alerts.older_than_days }} días
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div style="margin-top:10px;">
+      <small>
+        <b>Histórico:</b>
+        {{ kpis.lifetime.quotes.total }} cotizaciones •
+        {{ kpis.lifetime.postventas.total }} postventas
+      </small>
     </div>
   </div>
   {% endif %}
 
-  <!-- ================= SUBIR COTIZACIÓN ================= -->
+  {# ================= Subir cotización ================= #}
   <div class="card">
     <div class="actions" style="margin-bottom:10px;">
       <a class="btn btn-primary" href="/ui/postventa/new">+ Nueva postventa</a>
@@ -187,7 +187,7 @@
     </form>
   </div>
 
-  <!-- ================= COTIZACIONES ================= -->
+  {# ================= Cotizaciones ================= #}
   <div class="card">
     <h2>Cotizaciones</h2>
 
@@ -202,6 +202,7 @@
             <th></th>
           </tr>
         </thead>
+
         <tbody>
           {% for q in quotes %}
           <tr>
@@ -229,7 +230,7 @@
     </div>
   </div>
 
-  <!-- ================= POSTVENTAS ================= -->
+  {# ================= Postventas ================= #}
   <div class="card">
     <h2>Postventas (sin cotización)</h2>
 
@@ -249,6 +250,7 @@
             <th></th>
           </tr>
         </thead>
+
         <tbody>
           {% for p in postventas %}
           <tr>
