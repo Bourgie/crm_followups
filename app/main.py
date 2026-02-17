@@ -419,10 +419,10 @@ def ui_postventa_create(
         event=event,
     )
 
-    return redirect_with_msg(
-        f"/ui/postventa?postventa_id={new_id}",
-        "Postventa creada",
-        "success",
+    # ✅ OJO: el msg va con & (no con ?)
+    return RedirectResponse(
+        f"/ui/postventa?postventa_id={new_id}&msg=Postventa+creada&msg_type=success",
+        status_code=303
     )
 
 

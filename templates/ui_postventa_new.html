@@ -1,10 +1,9 @@
 <!doctype html>
-<html>
+<html lang="es">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-
-  <title>Nueva postventa</title>
+  <title>Nueva Postventa</title>
   <link rel="stylesheet" href="/static/styles.css">
 </head>
 <body>
@@ -13,63 +12,59 @@
   <div class="topbar-inner">
     <div class="brand">
       <img src="/static/pizarro-logo.png" alt="Pizarro">
-      <div class="title">Seguimiento</div>
+      <div class="title">Postventa</div>
     </div>
+
     <div class="subtle" style="display:flex; gap:12px; align-items:center;">
       <span title="{{ vendor_email }}">{{ vendor_email }}</span>
-      {% if is_admin %}
-        <a href="/admin" style="color: rgba(255,255,255,.95); font-weight:800;">
-        Panel Admin
-        </a>
-      {% endif %}
+      <a href="/ui" style="color: rgba(255,255,255,.85); font-weight:800;">Volver</a>
       <a href="/logout" style="color: rgba(255,255,255,.85); font-weight:800;">Salir</a>
     </div>
   </div>
 </header>
 
 <main class="container">
+
   {% if msg %}
     <div class="notice {{ msg_type }}">{{ msg }}</div>
   {% endif %}
 
-  <div class="actions" style="margin-top:10px;">
-    <a class="btn btn-secondary" href="/ui">← Volver</a>
-  </div>
-
   <div class="card">
-    <h1>Nueva postventa (sin cotización)</h1>
-    <small>Crea un evento en tu Google Calendar para recordarte la postventa.</small>
+    <h1>Nueva postventa</h1>
+    <small>Usá el calendario para elegir la fecha (evita errores de formato).</small>
 
     <form action="/ui/postventa/create" method="post" style="margin-top:14px;">
-      <label>Cliente *</label>
+
+      <label>Cliente</label>
       <input type="text" name="client_name" required placeholder="Nombre del cliente">
 
-      <label>Teléfono (opcional)</label>
-      <input type="text" name="phone" placeholder="Ej: 381-xxxxxxx">
+      <label>Teléfono</label>
+      <input type="tel" name="phone" placeholder="Ej: 383-xxxxxxx">
 
-      <label>Fecha venta/instalación (opcional)</label>
-      <input type="text" name="sale_date" placeholder="Ej: 2026-02-11">
+      <label>Fecha de venta</label>
+      <input type="date" name="sale_date">
 
-      <label>Fecha postventa *</label>
-      <input type="text" name="postventa_date" required value="{{ default_postventa_date }}" placeholder="YYYY-MM-DD">
+      <label>Fecha de postventa</label>
+      <input type="date" name="postventa_date" value="{{ default_postventa_date }}" required>
 
       <label>Tipo</label>
       <select name="type">
         <option value="postventa">postventa</option>
-        <option value="instalacion">instalacion</option>
-        <option value="entrega">entrega</option>
-        <option value="garantia">garantia</option>
+        <option value="mantenimiento">mantenimiento</option>
+        <option value="garantia">garantía</option>
       </select>
 
       <label>Notas</label>
-      <textarea name="notes" placeholder="Ej: Revisar funcionamiento, preguntar conformidad, ofrecer mantenimiento."></textarea>
+      <textarea name="notes" placeholder="Ej: llamar para coordinar visita / revisar instalación"></textarea>
 
       <div class="actions">
         <button class="btn btn-primary" type="submit">Crear postventa</button>
+        <a class="btn btn-secondary" href="/ui">Cancelar</a>
       </div>
+
     </form>
   </div>
-</main>
 
+</main>
 </body>
 </html>
